@@ -1,5 +1,8 @@
 module github.com/smnzlnsk/opentelemetry-components/exporters/backend
 
+// module is declared absolete by author as of 09/11/2024
+retract v0.0.0
+
 go 1.23.0
 
 require (
