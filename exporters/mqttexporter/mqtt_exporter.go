@@ -1,4 +1,4 @@
-package mqttexporter // import github.com/smnzlnsk/opentelemetry-components/exporters/mqtt
+package mqttexporter // import github.com/smnzlnsk/opentelemetry-components/exporters/mqttexporter
 
 import (
 	"context"
@@ -50,7 +50,7 @@ func (me *mqttExporter) pushMetrics(ctx context.Context, md pmetric.Metrics) err
 	if token.Error() != nil {
 		me.logger.Error("error in publishing metric data")
 	}
-	me.logger.Debug("published metric data")
+	me.logger.Info("published metric data")
 	return nil
 }
 

@@ -1,4 +1,4 @@
-module github.com/smnzlnsk/opentelemetry-components/exporters/mqtt
+module github.com/smnzlnsk/opentelemetry-components/exporters/mqttexporter
 
 go 1.23.0
 

@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 )
 
-// NewFactory creates a factory for mqtt-exporter
+// NewFactory creates a factory for mqttexporter-exporter
 func NewFactory() exporter.Factory {
 	return exporter.NewFactory(
 		metadata.Type,

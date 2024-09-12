@@ -1,10 +1,10 @@
-package mqttexporter // import github.com/smnzlnsk/opentelemetry-components/exporters/mqtt
+package mqttexporter // import github.com/smnzlnsk/opentelemetry-components/exporters/mqttexporter
 
 import (
 	"context"
 	"time"
 
-	"github.com/smnzlnsk/opentelemetry-components/exporters/mqtt/internal/metadata"
+	"github.com/smnzlnsk/opentelemetry-components/exporters/mqttexporter/internal/metadata"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
@@ -12,14 +12,14 @@ import (
 
 const (
 	defaultInterval   = time.Second * 1
-	defaultClientID   = "test-mqtt-exporter-client"
+	defaultClientID   = "test-mqttexporter-exporter-client"
 	defaultTopic      = "telemetry/metrics"
 	defaultEncoding   = "proto"
 	defaultBroker     = "127.0.0.1"
 	defaultBrokerPort = 1883
 )
 
-// NewFactory creates a factory for mqtt-exporter
+// NewFactory creates a factory for mqttexporter-exporter
 func NewFactory() exporter.Factory {
 	return exporter.NewFactory(
 		metadata.Type,

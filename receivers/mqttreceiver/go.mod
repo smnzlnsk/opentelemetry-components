@@ -1,4 +1,4 @@
-module github.com/smnzlnsk/opentelemetry-components/receivers/mqtt
+module github.com/smnzlnsk/opentelemetry-components/receivers/mqttreceiver
 
 go 1.23.0
 

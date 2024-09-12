@@ -1,4 +1,4 @@
-package mqttreceiver // import github.com/smnzlnsk/opentelemetry-components/receivers/mqtt
+package mqttreceiver // import github.com/smnzlnsk/opentelemetry-components/receivers/mqttreceiver
 
 import (
 	"go.opentelemetry.io/collector/pdata/pmetric"

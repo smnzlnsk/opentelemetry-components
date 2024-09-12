@@ -1,11 +1,11 @@
-package mqttreceiver // import github.com/smnzlnsk/opentelemetry-components/receivers/mqtt
+package mqttreceiver // import github.com/smnzlnsk/opentelemetry-components/receivers/mqttreceiver
 
 import (
 	"context"
 	"os"
 	"time"
 
-	"github.com/smnzlnsk/opentelemetry-components/receivers/mqtt/internal/metadata"
+	"github.com/smnzlnsk/opentelemetry-components/receivers/mqttreceiver/internal/metadata"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver"
@@ -20,7 +20,7 @@ const (
 	defaultBrokerPort = 1883
 )
 
-// NewFactory creates a factory for mqtt-exporter
+// NewFactory creates a factory for mqttreceiver
 func NewFactory() receiver.Factory {
 	return receiver.NewFactory(
 		metadata.Type,

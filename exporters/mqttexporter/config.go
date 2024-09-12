@@ -1,4 +1,4 @@
-package mqttexporter // import github.com/smnzlnsk/opentelemetry-components/exporters/mqtt
+package mqttexporter // import github.com/smnzlnsk/opentelemetry-components/exporters/mqttexporter
 
 import (
 	"errors"

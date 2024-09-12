@@ -1,9 +1,8 @@
-package mqttreceiver // import github.com/smnzlnsk/opentelemetry-components/receivers/mqtt
+package mqttreceiver // import github.com/smnzlnsk/opentelemetry-components/receivers/mqttreceiver
 
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -100,6 +99,7 @@ func (mr *mqttReceiver) ConsumeMetrics(ctx context.Context, metrics pmetric.Metr
 
 func (mr *mqttReceiver) handleMetrics(c mqtt.Client, m mqtt.Message) {
 	data, err := mr.marshaler.metricsUnmarshaler.UnmarshalMetrics(m.Payload())
+	mr.logger.Info("received metric data")
 	if err != nil {
 		mr.logger.Error("could not unmarshal message")
 		return
@@ -117,7 +117,7 @@ func (mr *mqttReceiver) RegisterTopic(topic string, handler mqtt.MessageHandler)
 	mr.topics[topic] = handler
 	token := mr.client.Subscribe(topic, 1, handler)
 	if token.WaitTimeout(time.Second*5) && token.Error() != nil {
-		log.Printf("error in register topic: %s", token.Error())
+		mr.logger.Error("error in register topic: %s", zap.Error(token.Error()))
 	}
 }
 
@@ -127,6 +127,6 @@ func (mr *mqttReceiver) DeregisterTopic(topic string) {
 	token := mr.client.Unsubscribe(topic)
 	delete(mr.topics, topic)
 	if token.WaitTimeout(time.Second*5) && token.Error() != nil {
-		log.Printf("error in deregister topic: %s", token.Error())
+		mr.logger.Error("error in deregister topic: %s", zap.Error(token.Error()))
 	}
 }
