@@ -31,7 +31,7 @@ func NewFactory() receiver.Factory {
 
 func createDefaultConfig() component.Config {
 	return &Config{
-		Interval: string(defaultInterval),
+		Interval: defaultInterval.String(),
 		ClientID: defaultClientID,
 		Topic:    defaultTopic,
 		Encoding: defaultEncoding,
