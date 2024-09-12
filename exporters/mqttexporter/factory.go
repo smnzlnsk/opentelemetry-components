@@ -12,14 +12,14 @@ import (
 
 const (
 	defaultInterval   = time.Second * 1
-	defaultClientID   = "test-mqttexporter-exporter-client"
+	defaultClientID   = "test-mqtt-exporter-client"
 	defaultTopic      = "telemetry/metrics"
 	defaultEncoding   = "proto"
 	defaultBroker     = "127.0.0.1"
 	defaultBrokerPort = 1883
 )
 
-// NewFactory creates a factory for mqttexporter-exporter
+// NewFactory creates a factory for mqtt-exporter
 func NewFactory() exporter.Factory {
 	return exporter.NewFactory(
 		metadata.Type,
