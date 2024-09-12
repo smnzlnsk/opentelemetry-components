@@ -30,7 +30,7 @@ func NewFactory() exporter.Factory {
 
 func createDefaultConfig() component.Config {
 	return &Config{
-		Interval: string(defaultInterval),
+		Interval: defaultInterval.String(),
 		ClientID: defaultClientID,
 		Topic:    defaultTopic,
 		Encoding: defaultEncoding,
@@ -46,7 +46,7 @@ func createMetricsExporter(
 	set exporter.Settings,
 	cfg component.Config,
 ) (exporter.Metrics, error) {
-	config := (cfg.(*Config))
+	config := cfg.(*Config)
 	logger := set.Logger
 	me, err := newMQTTExporter(config, logger)
 	if err != nil {
