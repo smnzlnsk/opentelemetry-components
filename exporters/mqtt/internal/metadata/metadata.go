@@ -5,6 +5,6 @@ import (
 )
 
 var (
-	Type      = component.MustNewType("mqttexporter")
+	Type      = component.MustNewType("mqtt")
 	ScopeName = "github.com/smnzlnsk/opentelemetry-components/exporters/mqtt"
 )
