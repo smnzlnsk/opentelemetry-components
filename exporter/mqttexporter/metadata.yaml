@@ -1,0 +1,10 @@
+type: mqtt
+
+status:
+  class: exporter
+  stability:
+    development: [metrics]
+  distributions: []
+  warnings: []
+  codeowners:
+    active: [smnzlnsk]
