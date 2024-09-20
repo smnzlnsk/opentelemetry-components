@@ -2,7 +2,8 @@ package mqttreceiver // import github.com/smnzlnsk/opentelemetry-components/rece
 
 import (
 	"errors"
-	"net"
+	"os"
+	"strconv"
 	"time"
 )
 
@@ -21,15 +22,21 @@ type BrokerConfig struct {
 }
 
 // Validate checks if the receiver configuration is valid
+// Additionally it overrides the configuration set if the respective environment variables are set
 func (cfg *Config) Validate() error {
 	// client ID
+	if os.Getenv("MQTTRECEIVER_MONITORING_CLIENT_ID") != "" {
+		cfg.ClientID = os.Getenv("MQTTRECEIVER_CLIENT_ID")
+	}
 	if cfg.ClientID == "" {
 		return errors.New("client id has to be set")
 	}
+
 	// topic
 	if cfg.Topic == "" {
 		return errors.New("topic has to be set")
 	}
+
 	// interval
 	interval, _ := time.ParseDuration(cfg.Interval)
 	if interval.Seconds() < 1 {
@@ -38,21 +45,28 @@ func (cfg *Config) Validate() error {
 	if interval.Seconds() > 60 {
 		return errors.New("interval cannot be more than a minute")
 	}
+
+	// encoding
 	if cfg.Encoding != "json" && cfg.Encoding != "proto" {
 		return errors.New("unsupported encoding. supported encoding: json, proto")
 	}
+
 	// broker.host
+	if os.Getenv("MQTTRECEIVER_MONITORING_BROKER_HOST") != "" {
+		cfg.Broker.Host = os.Getenv("MQTTRECEIVER_MONITORING_BROKER_HOST")
+	}
 	//if !isValidIP(cfg.Broker.Host) {
-	//return errors.New("broker.host is invalid")
+	//	return errors.New("broker.host is invalid")
 	//}
+
 	// broker.port
+	if os.Getenv("MQTTRECEIVER_MONITORING_BROKER_PORT") != "" {
+		if v, err := strconv.Atoi(os.Getenv("MQTTRECEIVER_MONITORING_BROKER_PORT")); err != nil {
+			cfg.Broker.Port = v
+		}
+	}
 	if cfg.Broker.Port > 65535 || cfg.Broker.Port < 1 {
 		return errors.New("broker.port is invalid")
 	}
 	return nil
-}
-
-func isValidIP(ip string) bool {
-	parsedIP := net.ParseIP(ip)
-	return parsedIP != nil
 }
