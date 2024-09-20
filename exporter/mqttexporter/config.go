@@ -26,7 +26,7 @@ type BrokerConfig struct {
 func (cfg *Config) Validate() error {
 	// client ID
 	if os.Getenv("MQTTEXPORTER_MONITORING_CLIENT_ID") != "" {
-		cfg.ClientID = os.Getenv("MQTTEXPORTER_CLIENT_ID")
+		cfg.ClientID = os.Getenv("MQTTEXPORTER_MONITORING_CLIENT_ID")
 	}
 	if cfg.ClientID == "" {
 		return errors.New("client id has to be set")
