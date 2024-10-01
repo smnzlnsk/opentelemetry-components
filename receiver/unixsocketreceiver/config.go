@@ -33,7 +33,7 @@ func (cfg *Config) Validate() error {
 	info, err := os.Stat(cfg.Folder)
 	// create folder if it does not exist
 	if errors.Is(err, os.ErrNotExist) {
-		dirErr := os.Mkdir(cfg.Folder, 0755)
+		dirErr := os.MkdirAll(cfg.Folder, 0755)
 		if dirErr != nil {
 			return dirErr
 		}
