@@ -60,7 +60,6 @@ func (me *mqttExporter) start(ctx context.Context, host component.Host) error {
 		return err
 	}
 	me.marshaler = marshaler
-	fmt.Printf("%v", me.marshaler)
 	me.host = host
 	return nil
 }
