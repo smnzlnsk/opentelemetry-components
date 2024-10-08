@@ -71,6 +71,8 @@ func (usr *unixSocketReceiver) connectToUnixSocket(socketPath string) {
 	// err was already validated in config validation on init
 	t, _ := time.ParseDuration(usr.config.Interval)
 
+	usr.logger.Info("connecting to new unix socket", zap.String("socket", socketPath))
+
 	for {
 		// connect to socket
 		conn, err := net.Dial("unix", socketPath)
@@ -78,11 +80,8 @@ func (usr *unixSocketReceiver) connectToUnixSocket(socketPath string) {
 			usr.logger.Error("failed to connect to unix socket",
 				zap.String("socket", socketPath),
 				zap.Error(err))
-			conn.Close()
 			return
 		}
-
-		usr.logger.Info("connected to new unix socket", zap.String("socket", socketPath))
 
 		// message
 		message := "ping"
@@ -91,7 +90,6 @@ func (usr *unixSocketReceiver) connectToUnixSocket(socketPath string) {
 			usr.logger.Error("failed to write to unix socket",
 				zap.String("socket", socketPath),
 				zap.Error(err))
-			conn.Close()
 			return
 		}
 
@@ -103,12 +101,18 @@ func (usr *unixSocketReceiver) connectToUnixSocket(socketPath string) {
 				zap.String("socket", socketPath),
 				zap.Error(err))
 			return
-			conn.Close()
 		}
 		usr.logger.Info("received response from unix socket",
 			zap.String("socket", socketPath),
 			zap.String("message", string(buffer[:n])))
 
+		err = conn.Close()
+		if err != nil {
+			usr.logger.Error("failed to close unix socket connection",
+				zap.String("socket", socketPath),
+				zap.Error(err))
+			return
+		}
 		time.Sleep(t)
 	}
 }
