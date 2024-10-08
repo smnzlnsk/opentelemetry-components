@@ -68,6 +68,9 @@ func (usr *unixSocketReceiver) ConsumeMetrics(ctx context.Context, md pmetric.Me
 }
 
 func (usr *unixSocketReceiver) connectToUnixSocket(socketPath string) {
+	// err was already validated in config validation on init
+	t, _ := time.ParseDuration(usr.config.Interval)
+
 	// connect to socket
 	conn, err := net.Dial("unix", socketPath)
 	if err != nil {
@@ -80,26 +83,30 @@ func (usr *unixSocketReceiver) connectToUnixSocket(socketPath string) {
 
 	usr.logger.Info("connected to new unix socket", zap.String("socket", socketPath))
 
-	// message
-	message := "ping"
-	_, err = conn.Write([]byte(message))
-	if err != nil {
-		usr.logger.Error("failed to write to unix socket",
-			zap.String("socket", socketPath),
-			zap.Error(err))
-		return
-	}
+	for {
+		// message
+		message := "ping"
+		_, err = conn.Write([]byte(message))
+		if err != nil {
+			usr.logger.Error("failed to write to unix socket",
+				zap.String("socket", socketPath),
+				zap.Error(err))
+			return
+		}
 
-	// response
-	buffer := make([]byte, 1024)
-	n, err := conn.Read(buffer)
-	if err != nil {
-		usr.logger.Error("failed to read from unix socket",
+		// response
+		buffer := make([]byte, 1024)
+		n, err := conn.Read(buffer)
+		if err != nil {
+			usr.logger.Error("failed to read from unix socket",
+				zap.String("socket", socketPath),
+				zap.Error(err))
+			return
+		}
+		usr.logger.Info("received response from unix socket",
 			zap.String("socket", socketPath),
-			zap.Error(err))
-		return
+			zap.String("message", string(buffer[:n])))
+
+		time.Sleep(t)
 	}
-	usr.logger.Info("received response from unix socket",
-		zap.String("socket", socketPath),
-		zap.String("message", string(buffer[:n])))
 }

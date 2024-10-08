@@ -14,7 +14,10 @@ type Config struct {
 
 func (cfg *Config) Validate() error {
 	// interval
-	interval, _ := time.ParseDuration(cfg.Interval)
+	interval, err := time.ParseDuration(cfg.Interval)
+	if err != nil {
+		return err
+	}
 	if interval.Seconds() < 1 {
 		return errors.New("interval cannot be sub-second")
 	}
