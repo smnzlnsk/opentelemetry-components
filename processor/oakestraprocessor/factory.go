@@ -9,8 +9,6 @@ import (
 	"go.opentelemetry.io/collector/processor"
 )
 
-const ()
-
 // NewFactory creates a factory for oakestraprocessor
 func NewFactory() processor.Factory {
 	return processor.NewFactory(
