@@ -31,11 +31,13 @@ func NewDirectoryWatcher(dir string, logger *zap.Logger, interval time.Duration,
 // Start starts the directory watcher, polling for changes every interval seconds
 func (dw *DirectoryWatcher) Start() {
 	dw.logger.Info("Starting directory watcher...")
-	for {
-		// Poll the directory for new files.
-		dw.pollDirectory()
-		time.Sleep(dw.interval)
-	}
+	go func() {
+		for {
+			// Poll the directory for new files.
+			dw.pollDirectory()
+			time.Sleep(dw.interval)
+		}
+	}()
 }
 
 func (dw *DirectoryWatcher) pollDirectory() {
