@@ -6,24 +6,24 @@ import (
 
 // Config represents the receiver config settings within the collector's config.yaml
 type Config struct {
-	endpoint endpoint `mapstructure:"endpoint"`
+	Endpoint EndpointConfig `mapstructure:"endpoint"`
 }
 
-type endpoint struct {
-	ip   string `mapstructure:"ip"`
-	port int    `mapstructure:"port"`
+type EndpointConfig struct {
+	IP   string `mapstructure:"ip"`
+	Port int    `mapstructure:"port"`
 }
 
 // Validate checks if the receiver configuration is valid
 // Additionally it overrides the configuration set if the respective environment variables are set
 func (cfg *Config) Validate() error {
-	if cfg.endpoint.ip == "" {
+	if cfg.Endpoint.IP == "" {
 		return errors.New("endpoint.ip is required")
 	}
-	if net.ParseIP(cfg.endpoint.ip) == nil {
+	if net.ParseIP(cfg.Endpoint.IP) == nil {
 		return errors.New("endpoint.ip is not a valid IP address")
 	}
-	if cfg.endpoint.port > 65535 || cfg.endpoint.port < 1024 {
+	if cfg.Endpoint.Port > 65535 || cfg.Endpoint.Port < 1024 {
 		return errors.New("endpoint.port is not a valid port")
 	}
 	return nil

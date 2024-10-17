@@ -8,7 +8,9 @@ import (
 	"go.opentelemetry.io/collector/receiver"
 )
 
-const ()
+const (
+	defaultPort = 2254
+)
 
 // NewFactory creates a factory for httpreceiver
 func NewFactory() receiver.Factory {
@@ -20,7 +22,11 @@ func NewFactory() receiver.Factory {
 }
 
 func createDefaultConfig() component.Config {
-	return &Config{}
+	return &Config{
+		Endpoint: EndpointConfig{
+			Port: defaultPort,
+		},
+	}
 }
 
 func createMetricsReceiver(

@@ -72,7 +72,7 @@ func (hr *httpReceiver) startHTTPServer() {
 	mux.HandleFunc("/v1/metrics", hr.metricsHandler)
 
 	err := http.ListenAndServe(
-		fmt.Sprintf("%s:%d", hr.config.endpoint.ip, hr.config.endpoint.port),
+		fmt.Sprintf("%s:%d", hr.config.Endpoint.IP, hr.config.Endpoint.Port),
 		mux)
 	if err != nil {
 		hr.logger.Error("failed to start http server", zap.Error(err))
