@@ -38,7 +38,7 @@ func (he *httpExporter) pushMetrics(ctx context.Context, md pmetric.Metrics) err
 	}
 
 	req, err := http.NewRequest("POST",
-		fmt.Sprintf("%s:%d/v1/metrics", he.config.endpoint.ip, he.config.endpoint.port),
+		fmt.Sprintf("%s:%d/v1/metrics", he.config.Endpoint.IP, he.config.Endpoint.Port),
 		bytes.NewBuffer(data),
 	)
 	if err != nil {

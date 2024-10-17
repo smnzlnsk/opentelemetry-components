@@ -24,9 +24,9 @@ func NewFactory() exporter.Factory {
 
 func createDefaultConfig() component.Config {
 	return &Config{
-		endpoint{
-			ip:   defaultIP,
-			port: defaultPort,
+		EndpointConfig{
+			IP:   defaultIP,
+			Port: defaultPort,
 		},
 	}
 }
