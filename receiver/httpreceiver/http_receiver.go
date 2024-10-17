@@ -42,6 +42,8 @@ func (hr *httpReceiver) Start(ctx context.Context, host component.Host) error {
 	hr.marshaler = marshaler
 	hr.host = host
 
+	hr.startHTTPServer()
+
 	return nil
 }
 
