@@ -8,3 +8,18 @@ status:
   warnings: []
   codeowners:
     active: [smnzlnsk]
+
+metrics:
+  application.image.fps:
+    enabled: true
+    description: Frames per Second reported by application.
+    unit: fps
+    gauge:
+      value_type: float
+
+  application.image.frametime:
+    enabled: true
+    description: Time used for frame processing
+    unit: us
+    gauge:
+      value_type: int
