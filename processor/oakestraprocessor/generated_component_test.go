@@ -104,7 +104,7 @@ func generateLifecycleTestLogs() plog.Logs {
 	rl := logs.ResourceLogs().AppendEmpty()
 	rl.Resource().Attributes().PutStr("resource", "R1")
 	l := rl.ScopeLogs().AppendEmpty().LogRecords().AppendEmpty()
-	l.Body().SetStr("test log message")
+	l.Body().SetStr("test logger message")
 	l.SetTimestamp(pcommon.NewTimestampFromTime(time.Now()))
 	return logs
 }

@@ -1,0 +1,14 @@
+CPU:
+    - process.cpu.time: {state} system, user (14205.56, 1797.28) -> Total seconds
+    - container_cpu_usage_usec_microseconds -> Total cpu usage in microseconds
+    - container_cpu_system_usec_microseconds -> Current cpu usage in kernel space (40299)
+    - container_cpu_user_usec_microseconds -> Current cpu usage in user space (17127)
+Memory:
+    - Host: system.memory.usage: bytes of memory in use (2149523456)
+    - Process: process.memory.usage: bytes of physical memory in use (51310592)
+    - container_memory_usage_bytes
+    - container_memory_kernel_stack_bytes
+    -
+Network:
+    - system.network.connections {protocol, state}
+    - system.network.dropped {interface, direction} -> indicates, whether buffers are full
