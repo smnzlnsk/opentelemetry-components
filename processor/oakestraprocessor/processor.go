@@ -74,15 +74,32 @@ func createProcessor(
 	return p, nil
 }
 
-func (p *MultiProcessor) Start(ctx context.Context, _ component.Host) error {
+func (p *MultiProcessor) Start(ctx context.Context, host component.Host) error {
+	p.logger.Info("Starting Oakestra Processor")
 	ctx, cancel := context.WithCancel(context.Background())
 	p.cancel = cancel
-	p.logger.Info("starting oakestra processor")
+
+	for _, subp := range p.processors {
+		err := subp.Start(ctx, host)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
-func (p *MultiProcessor) Shutdown(_ context.Context) error {
-	p.cancel()
+func (p *MultiProcessor) Shutdown(ctx context.Context) error {
+	p.logger.Info("Shutting down Oakestra Processor")
+	for _, subp := range p.processors {
+		err := subp.Shutdown(ctx)
+		if err != nil {
+			return err
+		}
+	}
+	if p.cancel != nil {
+		p.cancel()
+	}
 	return nil
 }
 
@@ -99,6 +116,7 @@ func (p *MultiProcessor) ConsumeMetrics(ctx context.Context, metrics pmetric.Met
 	for _, subp := range p.processors {
 		err := subp.ProcessMetrics(metrics)
 		if err != nil {
+			p.logger.Error("error", zap.Error(err))
 			return err
 		}
 	}
