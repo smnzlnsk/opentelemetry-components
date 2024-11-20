@@ -11,3 +11,17 @@ status:
   codeowners:
     active: [smnzlnsk]
 
+attributes:
+  state:
+    description: recorded states
+    type: string
+    enum: [system, user]
+
+metrics:
+  service.cpu.utilisation:
+    enabled: true
+    description: percentage of total cpu time used by service in certain state
+    unit: percent
+    gauge:
+      value_type: double
+    attributes: [state]
