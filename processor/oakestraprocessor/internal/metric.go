@@ -1,4 +1,4 @@
-package calculation
+package internal
 
 import (
 	"go.opentelemetry.io/collector/pdata/pcommon"

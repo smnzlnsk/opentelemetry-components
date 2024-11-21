@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/calculation"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/processor"
@@ -12,54 +11,29 @@ import (
 )
 
 type CPUMetricProcessor struct {
-	filter internal.Filter
-	cancel context.CancelFunc
+	internal.BaseProcessor
 	logger *zap.Logger
+	cancel context.CancelFunc
 }
 
+var _ internal.MetricProcessor = (*CPUMetricProcessor)(nil)
+
 func (c *CPUMetricProcessor) ProcessMetrics(metrics pmetric.Metrics) error {
-	calc := calculation.NewCalculation(c.filter)
+	calc := internal.NewCalculation("[container.cpu.time] / [system.cpu.time]", c.BaseProcessor.Filter)
 	_, err := c.processMetrics(calc, metrics)
 	if err != nil {
 		return err
 	}
 	// c.logger.Info(st)
-	c.logger.Info("calculation", zap.Any("c", calc.AtomicCalculation))
+	//c.logger.Info("calculation", zap.Any("c", calc.AtomicCalculation))
 	return nil
 }
 
-func (c *CPUMetricProcessor) processMetrics(calc *calculation.Calculation, metrics pmetric.Metrics) (string, error) {
+func (c *CPUMetricProcessor) processMetrics(calc *internal.Calculation, metrics pmetric.Metrics) (string, error) {
 	st := ""
-	for i := 0; i < metrics.ResourceMetrics().Len(); i++ {
-		rm := metrics.ResourceMetrics().At(i)
-		rmAttr := rm.Resource().Attributes().AsRaw()
-		// TODO: this can be done better using the built-in .Get()
-		if internal.Map_contains(rmAttr, "container_id") && internal.Map_contains(rmAttr, "namespace") {
-			s, _ := rmAttr["container_id"]
-			calc.Service = fmt.Sprintf("%v", s)
-		}
-		for j := 0; j < rm.ScopeMetrics().Len(); j++ {
-			smetric := rm.ScopeMetrics().At(j)
-			for k := 0; k < smetric.Metrics().Len(); k++ {
-				mmetric := smetric.Metrics().At(k)
-				if active, ok := c.filter.MetricFilter[mmetric.Name()]; active && ok {
-					for x := 0; x < mmetric.Sum().DataPoints().Len(); x++ {
-						ndp := mmetric.Sum().DataPoints().At(x)
-						for state, _ := range c.filter.StateFilter {
-							if s, ok := ndp.Attributes().Get("state"); ok {
-								if state == s.Str() {
-									md := calculation.CreateMetricDatapoint(mmetric, x)
-									calc.SetValue(state, mmetric.Name(), md)
-								}
-							}
-						}
-					}
-					// for debugging
-					mmetric.CopyTo(calc.Metrics[mmetric.Name()])
-				}
-			}
-		}
-	}
+	c.ExtractMetricsIntoCalculation(metrics, calc)
+	c.logger.Info("calculation done", zap.Any("result", calc.EvaluateFormula()))
+
 	// for debugging
 	st = fmt.Sprintf("%s\nService: %s\nCalcMetrics: %v", st, calc.Service, calc.Metrics)
 	for s, m := range calc.Metrics {
@@ -107,10 +81,6 @@ func (c *CPUMetricProcessor) Start(ctx context.Context, _ component.Host) error 
 	return nil
 }
 
-func (c *CPUMetricProcessor) IdentifyServices(pmetric.Metrics) []string {
-	return []string{}
-}
-
 func newCPUMetricProcessor(
 	_ context.Context,
 	_ processor.Settings,
@@ -118,18 +88,21 @@ func newCPUMetricProcessor(
 	logger *zap.Logger,
 ) (internal.MetricProcessor, error) {
 	metricFilter := map[string]bool{
-		"container.cpu.time":     true,
-		"system.cpu.time":        true,
-		"system.cpu.utilization": false,
+		"container.cpu.time":       true,
+		"system.cpu.time":          true,
+		"system.cpu.logical.count": true,
+		"system.cpu.utilization":   false,
 	}
 	stateFilter := map[string]bool{
 		"system": true,
 		"user":   true,
 	}
 	return &CPUMetricProcessor{
-		filter: internal.Filter{
-			MetricFilter: metricFilter,
-			StateFilter:  stateFilter,
+		BaseProcessor: internal.BaseProcessor{
+			Filter: internal.Filter{
+				MetricFilter: metricFilter,
+				StateFilter:  stateFilter,
+			},
 		},
 		logger: logger,
 	}, nil

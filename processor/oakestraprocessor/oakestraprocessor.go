@@ -108,11 +108,6 @@ func (p *MultiProcessor) Capabilities() consumer.Capabilities {
 }
 
 func (p *MultiProcessor) ConsumeMetrics(ctx context.Context, metrics pmetric.Metrics) error {
-	p.logger.Info("metrics consumed", zap.Any("metrics", metrics.ResourceMetrics()))
-	// TODO: identify service being monitored
-
-	// TODO: compact down metrics into packages of service
-
 	for _, subp := range p.processors {
 		err := subp.ProcessMetrics(metrics)
 		if err != nil {
