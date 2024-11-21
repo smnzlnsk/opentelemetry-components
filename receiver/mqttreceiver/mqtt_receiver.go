@@ -102,7 +102,7 @@ func (mr *mqttReceiver) ConsumeMetrics(ctx context.Context, metrics pmetric.Metr
 
 func (mr *mqttReceiver) handleMetrics(c mqtt.Client, m mqtt.Message) {
 	data, err := mr.marshaler.metricsUnmarshaler.UnmarshalMetrics(m.Payload())
-	mr.logger.Info("received metric data")
+	mr.logger.Debug("received metric data")
 	if err != nil {
 		mr.logger.Error("could not unmarshal message")
 		return
