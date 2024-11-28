@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/cpuprocessor/internal/metadata"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/processor"
@@ -12,8 +13,11 @@ import (
 
 type CPUMetricProcessor struct {
 	internal.BaseProcessor
-	logger *zap.Logger
-	cancel context.CancelFunc
+	config   internal.Config
+	logger   *zap.Logger
+	cancel   context.CancelFunc
+	settings processor.Settings
+	mb       *metadata.MetricsBuilder
 }
 
 var _ internal.MetricProcessor = (*CPUMetricProcessor)(nil)
@@ -83,9 +87,8 @@ func (c *CPUMetricProcessor) Start(ctx context.Context, _ component.Host) error 
 
 func newCPUMetricProcessor(
 	_ context.Context,
-	_ processor.Settings,
-	_ internal.Config,
-	logger *zap.Logger,
+	set processor.Settings,
+	cfg internal.Config,
 ) (internal.MetricProcessor, error) {
 	metricFilter := map[string]bool{
 		"container.cpu.time":       true,
@@ -104,6 +107,8 @@ func newCPUMetricProcessor(
 				StateFilter:  stateFilter,
 			},
 		},
-		logger: logger,
+		config:   cfg,
+		settings: set,
+		logger:   set.Logger,
 	}, nil
 }

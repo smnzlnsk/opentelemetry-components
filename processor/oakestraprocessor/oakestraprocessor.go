@@ -20,17 +20,16 @@ type MultiProcessor struct {
 	cancel     context.CancelFunc
 }
 
-func newMultiProcessor(ctx context.Context, set processor.Settings, cfg *Config, logger *zap.Logger, next consumer.Metrics) *MultiProcessor {
-	p, err := createProcessors(ctx, set, cfg, logger, processorFactories)
+func newMultiProcessor(ctx context.Context, set processor.Settings, cfg *Config, next consumer.Metrics) *MultiProcessor {
+	p, err := createProcessors(ctx, set, cfg, processorFactories)
 	if err != nil {
-		logger.Error(err.Error())
+		set.Logger.Error(err.Error())
 		return nil
 	}
-
 	proc := MultiProcessor{
 		processors: p,
 		next:       next,
-		logger:     logger,
+		logger:     set.Logger,
 	}
 	return &proc
 }
@@ -39,14 +38,13 @@ func createProcessors(
 	ctx context.Context,
 	set processor.Settings,
 	config *Config,
-	logger *zap.Logger,
 	factories map[string]internal.ProcessorFactory,
 ) ([]internal.MetricProcessor, error) {
 
 	processors := make([]internal.MetricProcessor, 0, len(config.Processors))
 
 	for key, cfg := range config.Processors {
-		metricsProcessor, err := createProcessor(ctx, set, cfg, logger, key, factories)
+		metricsProcessor, err := createProcessor(ctx, set, cfg, key, factories)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create metrics processor for key: %q: %w", key, err)
 		}
@@ -59,7 +57,6 @@ func createProcessor(
 	ctx context.Context,
 	set processor.Settings,
 	cfg internal.Config,
-	logger *zap.Logger,
 	key string,
 	factories map[string]internal.ProcessorFactory,
 ) (internal.MetricProcessor, error) {
@@ -67,7 +64,7 @@ func createProcessor(
 	if factory == nil {
 		return nil, fmt.Errorf("unknown processor: %s", key)
 	}
-	p, err := factory.CreateMetricsProcessor(ctx, set, cfg, logger)
+	p, err := factory.CreateMetricsProcessor(ctx, set, cfg)
 	if err != nil {
 		return nil, err
 	}

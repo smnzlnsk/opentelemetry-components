@@ -36,11 +36,17 @@ func createMetricsProcessor(
 	cfg component.Config,
 	next consumer.Metrics,
 ) (processor.Metrics, error) {
-	logger := set.Logger
 	config, ok := cfg.(*Config)
 	if !ok {
 		return nil, fmt.Errorf("configuration could not be parsed")
 	}
 
-	return newMultiProcessor(ctx, set, config, logger, next), nil
+	return newMultiProcessor(ctx, set, config, next), nil
+}
+
+func getProcessorFactory(key string) (internal.ProcessorFactory, bool) {
+	if factory, ok := processorFactories[key]; ok {
+		return factory, true
+	}
+	return nil, false
 }

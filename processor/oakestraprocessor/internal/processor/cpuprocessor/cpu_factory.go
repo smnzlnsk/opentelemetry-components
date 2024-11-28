@@ -3,9 +3,9 @@ package cpuprocessor
 import (
 	"context"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/cpuprocessor/internal/metadata"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/processor"
-	"go.uber.org/zap"
 )
 
 const (
@@ -19,14 +19,15 @@ var (
 type Factory struct{}
 
 func (f *Factory) CreateDefaultConfig() internal.Config {
-	return Config{}
+	return &Config{
+		MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),
+	}
 }
 
 func (f *Factory) CreateMetricsProcessor(
 	ctx context.Context,
 	set processor.Settings,
 	cfg internal.Config,
-	logger *zap.Logger,
 ) (internal.MetricProcessor, error) {
-	return newCPUMetricProcessor(ctx, set, cfg, logger)
+	return newCPUMetricProcessor(ctx, set, cfg)
 }

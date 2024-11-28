@@ -7,7 +7,6 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/processor"
-	"go.uber.org/zap"
 )
 
 type ProcessorFactory interface {
@@ -15,8 +14,7 @@ type ProcessorFactory interface {
 	CreateMetricsProcessor(
 		ctx context.Context,
 		settings processor.Settings,
-		cfg Config,
-		logger *zap.Logger) (MetricProcessor, error)
+		cfg Config) (MetricProcessor, error)
 }
 
 // Config is the configuration of a processor
