@@ -2,15 +2,6 @@ type: oakestraprocessor/cpu
 
 parent: oakestraprocessor
 
-status:
-  class: processor
-  stability:
-    development: [metrics]
-  distributions: []
-  warnings: []
-  codeowners:
-    active: [smnzlnsk]
-
 attributes:
   state:
     description: recorded states
