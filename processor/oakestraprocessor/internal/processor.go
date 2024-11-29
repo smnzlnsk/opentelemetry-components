@@ -17,13 +17,6 @@ type ProcessorFactory interface {
 		cfg Config) (MetricProcessor, error)
 }
 
-// Config is the configuration of a processor
-type Config interface {
-}
-
-type ProcessorConfig struct {
-}
-
 type MetricProcessor interface {
 	Start(context.Context, component.Host) error
 	ProcessMetrics(pmetric.Metrics) error
@@ -58,20 +51,23 @@ func (b *BaseProcessor) ExtractMetricsIntoCalculation(metrics pmetric.Metrics, c
 			smetric := rm.ScopeMetrics().At(j)
 			for k := 0; k < smetric.Metrics().Len(); k++ {
 				mmetric := smetric.Metrics().At(k)
-				if active, ok := b.Filter.MetricFilter[mmetric.Name()]; ok && active {
-					for x := 0; x < mmetric.Sum().DataPoints().Len(); x++ {
-						ndp := mmetric.Sum().DataPoints().At(x)
-						for state, _ := range b.Filter.StateFilter {
-							if s, ok := ndp.Attributes().Get("state"); ok {
-								if state == s.Str() {
-									md := CreateMetricDatapoint(mmetric, x)
-									calc.SetValue(state, mmetric.Name(), md)
-								}
-							}
-						}
+				// guard clause, check that metric is set in filter and active
+				if active, ok := b.Filter.MetricFilter[mmetric.Name()]; !ok && active {
+					continue
+				}
+				for x := 0; x < mmetric.Sum().DataPoints().Len(); x++ {
+					ndp := mmetric.Sum().DataPoints().At(x)
+					// get 'state' attribute, if it exists, otherwise go to next metric
+					attr, ok := ndp.Attributes().Get("state")
+					if !ok {
+						break
 					}
-					// for debugging
-					mmetric.CopyTo(calc.Metrics[mmetric.Name()])
+					attrStr := attr.Str()
+					// see, if found state is supposed to be part of the calculation and set values
+					if _, ok := b.Filter.StateFilter[attrStr]; ok {
+						md := CreateMetricDatapoint(mmetric, x)
+						calc.SetValue(attrStr, mmetric.Name(), md)
+					}
 				}
 			}
 		}

@@ -2,14 +2,12 @@ package internal
 
 import (
 	"github.com/Knetic/govaluate"
-	"go.opentelemetry.io/collector/pdata/pmetric"
 )
 
 type Calculation struct {
 	Service           string
 	Formula           string
 	AtomicCalculation map[string]CalculationParameters
-	Metrics           map[string]pmetric.Metric // for debugging
 }
 
 type CalculationParameters map[string]*MetricDatapoint
@@ -18,7 +16,6 @@ func NewCalculation(formula string, filter Filter) *Calculation {
 	ca := &Calculation{
 		Formula:           formula,
 		AtomicCalculation: make(map[string]CalculationParameters),
-		Metrics:           make(map[string]pmetric.Metric), // for debugging
 	}
 	for state, active := range filter.StateFilter {
 		// add default
@@ -34,10 +31,6 @@ func NewCalculation(formula string, filter Filter) *Calculation {
 		}
 	}
 
-	// for debugging
-	for metric, _ := range filter.MetricFilter {
-		ca.Metrics[metric] = pmetric.NewMetric()
-	}
 	return ca
 }
 

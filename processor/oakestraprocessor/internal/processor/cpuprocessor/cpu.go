@@ -2,18 +2,20 @@ package cpuprocessor
 
 import (
 	"context"
-	"fmt"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/cpuprocessor/internal/metadata"
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/processor"
+	"go.opentelemetry.io/collector/receiver"
 	"go.uber.org/zap"
+	"time"
 )
 
 type CPUMetricProcessor struct {
 	internal.BaseProcessor
-	config   internal.Config
+	config   *Config
 	logger   *zap.Logger
 	cancel   context.CancelFunc
 	settings processor.Settings
@@ -24,54 +26,35 @@ var _ internal.MetricProcessor = (*CPUMetricProcessor)(nil)
 
 func (c *CPUMetricProcessor) ProcessMetrics(metrics pmetric.Metrics) error {
 	calc := internal.NewCalculation("[container.cpu.time] / [system.cpu.time]", c.BaseProcessor.Filter)
-	_, err := c.processMetrics(calc, metrics)
+
+	m, err := c.processMetrics(calc, metrics)
 	if err != nil {
 		return err
 	}
-	// c.logger.Info(st)
-	//c.logger.Info("calculation", zap.Any("c", calc.AtomicCalculation))
+
+	m.ResourceMetrics().MoveAndAppendTo(metrics.ResourceMetrics())
 	return nil
 }
 
-func (c *CPUMetricProcessor) processMetrics(calc *internal.Calculation, metrics pmetric.Metrics) (string, error) {
-	st := ""
+func (c *CPUMetricProcessor) processMetrics(calc *internal.Calculation, metrics pmetric.Metrics) (pmetric.Metrics, error) {
 	c.ExtractMetricsIntoCalculation(metrics, calc)
-	c.logger.Info("calculation done", zap.Any("result", calc.EvaluateFormula()))
-
-	// for debugging
-	st = fmt.Sprintf("%s\nService: %s\nCalcMetrics: %v", st, calc.Service, calc.Metrics)
-	for s, m := range calc.Metrics {
-		switch m.Type() {
-		case pmetric.MetricTypeGauge:
-			st = fmt.Sprintf("%s\n\tGauge: %s\n\t\t%d", st, s, m.Gauge().DataPoints().Len())
-			for num := 0; num < m.Gauge().DataPoints().Len(); num++ {
-				switch m.Gauge().DataPoints().At(num).ValueType().String() {
-				case "Int":
-					st = fmt.Sprintf("%s\n\t\t\tIntValue: %d\t\t%v", st, m.Gauge().DataPoints().At(num).IntValue(), m.Gauge().DataPoints().At(num).Attributes().AsRaw())
-				case "Double":
-					st = fmt.Sprintf("%s\n\t\t\tDoubleValue: %v\t\t%v", st, m.Gauge().DataPoints().At(num).DoubleValue(), m.Gauge().DataPoints().At(num).Attributes().AsRaw())
-				}
-			}
-		case pmetric.MetricTypeSum:
-			st = fmt.Sprintf("%s\n\tSum: %s\n\t\t%d", st, s, m.Sum().DataPoints().Len())
-			for num := 0; num < m.Sum().DataPoints().Len(); num++ {
-				switch m.Sum().DataPoints().At(num).ValueType() {
-				case pmetric.NumberDataPointValueTypeInt:
-					st = fmt.Sprintf("%s\n\t\t\tIntValue: %d\t\t%v", st, m.Sum().DataPoints().At(num).IntValue(), m.Sum().DataPoints().At(num).Attributes().AsRaw())
-				case pmetric.NumberDataPointValueTypeDouble:
-					st = fmt.Sprintf("%s\n\t\t\tDoubleValue: %v\t\t%v\t%s", st, m.Sum().DataPoints().At(num).DoubleValue(), m.Sum().DataPoints().At(num).Attributes().AsRaw(), m.Unit())
-				default:
-					continue
-				}
-			}
-		default:
+	for k, v := range calc.EvaluateFormula() {
+		if k == "default" {
 			continue
 		}
+		c.logger.Info("Creating metric", zap.Any("state", k), zap.Any("value", v), zap.Any("service", calc.Service))
+		c.mb.RecordServiceCPUUtilisationDataPoint(pcommon.NewTimestampFromTime(time.Now()), v.(float64), metadata.MapAttributeState[k])
 	}
-	return st, nil
+
+	// set resources
+	rb := c.mb.NewResourceBuilder()
+	rb.SetServiceName(calc.Service)
+	c.mb.EmitForResource(metadata.WithResource(rb.Emit()))
+
+	return c.mb.Emit(), nil
 }
 
-func (c *CPUMetricProcessor) Shutdown(ctx context.Context) error {
+func (c *CPUMetricProcessor) Shutdown(_ context.Context) error {
 	if c.cancel != nil {
 		c.cancel()
 	}
@@ -81,6 +64,8 @@ func (c *CPUMetricProcessor) Shutdown(ctx context.Context) error {
 
 func (c *CPUMetricProcessor) Start(ctx context.Context, _ component.Host) error {
 	ctx, c.cancel = context.WithCancel(ctx)
+	// initialize metric builder
+	c.mb = metadata.NewMetricsBuilder(c.config.MetricsBuilderConfig, receiver.Settings{TelemetrySettings: c.settings.TelemetrySettings})
 	c.logger.Info("Started CPU Processor")
 	return nil
 }
@@ -107,7 +92,7 @@ func newCPUMetricProcessor(
 				StateFilter:  stateFilter,
 			},
 		},
-		config:   cfg,
+		config:   cfg.(*Config),
 		settings: set,
 		logger:   set.Logger,
 	}, nil

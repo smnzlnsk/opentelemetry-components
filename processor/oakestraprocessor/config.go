@@ -60,7 +60,7 @@ func (cfg *Config) Unmarshal(cp *confmap.Conf) error {
 		}
 		err = processorCfgSection.Unmarshal(processorCfg)
 		if err != nil {
-			return fmt.Errorf("Error reading settings for processor %s: %w", key, err)
+			return fmt.Errorf("error reading settings for processor %s: %w", key, err)
 		}
 
 		cfg.Processors[key] = processorCfg

@@ -2,6 +2,12 @@ type: oakestraprocessor/cpu
 
 parent: oakestraprocessor
 
+resource_attributes:
+  service.name:
+    description: service name
+    type: string
+    enabled: true
+
 attributes:
   state:
     description: recorded states
