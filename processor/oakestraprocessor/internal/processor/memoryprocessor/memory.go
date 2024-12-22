@@ -1,10 +1,10 @@
-package cpuprocessor
+package memoryprocessor
 
 import (
 	"context"
 	"fmt"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/cpuprocessor/internal/metadata"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/memoryprocessor/internal/metadata"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-type CPUMetricProcessor struct {
+type MemoryMetricProcessor struct {
 	contracts *internal.ContractState // create a per-service map of calculation contracts
 	config    *Config
 	logger    *zap.Logger
@@ -23,9 +23,9 @@ type CPUMetricProcessor struct {
 	mb        *metadata.MetricsBuilder
 }
 
-var _ internal.MetricProcessor = (*CPUMetricProcessor)(nil)
+var _ internal.MetricProcessor = (*MemoryMetricProcessor)(nil)
 
-func (c *CPUMetricProcessor) ProcessMetrics(metrics pmetric.Metrics) error {
+func (c *MemoryMetricProcessor) ProcessMetrics(metrics pmetric.Metrics) error {
 
 	m, err := c.processMetrics(metrics)
 	if err != nil {
@@ -36,7 +36,7 @@ func (c *CPUMetricProcessor) ProcessMetrics(metrics pmetric.Metrics) error {
 	return nil
 }
 
-func (c *CPUMetricProcessor) processMetrics(metrics pmetric.Metrics) (pmetric.Metrics, error) {
+func (c *MemoryMetricProcessor) processMetrics(metrics pmetric.Metrics) (pmetric.Metrics, error) {
 	// setup new calculation mechanism
 	err := c.contracts.PopulateData(metrics)
 	if err != nil {
@@ -50,7 +50,9 @@ func (c *CPUMetricProcessor) processMetrics(metrics pmetric.Metrics) (pmetric.Me
 		rb.SetServiceName(service)
 		for _, state := range f {
 			for s, v := range state {
-				c.mb.RecordServiceCPUUtilisationDataPoint(
+				// TODO: create a contract meta tag
+				// indicating what metric the contract result is supposed to be assigned to
+				c.mb.RecordServiceMemoryUtilisationDataPoint(
 					pcommon.NewTimestampFromTime(time.Now()),
 					v,
 					metadata.MapAttributeState[s],
@@ -63,23 +65,25 @@ func (c *CPUMetricProcessor) processMetrics(metrics pmetric.Metrics) (pmetric.Me
 	return c.mb.Emit(), nil
 }
 
-func (c *CPUMetricProcessor) Shutdown(_ context.Context) error {
+func (c *MemoryMetricProcessor) Shutdown(_ context.Context) error {
 	if c.cancel != nil {
 		c.cancel()
 	}
-	c.logger.Info("Stopped CPU Processor")
+	c.logger.Info("Stopped Memory Processor")
 	return nil
 }
 
-func (c *CPUMetricProcessor) Start(ctx context.Context, _ component.Host) error {
+func (c *MemoryMetricProcessor) Start(ctx context.Context, _ component.Host) error {
 	ctx, c.cancel = context.WithCancel(ctx)
 
 	// initialize default contracts
 	if err := c.contracts.GenerateDefaultContract(
-		"[container.cpu.time] / [system.cpu.time]",
+		"[container.memory.usage] / [system.memory.usage]",
 		map[string]bool{
-			"user":   true,
-			"system": true},
+			"slab_reclaimable":   true,
+			"slab_unreclaimable": true,
+			"used":               true,
+		},
 	); err != nil {
 		return err
 	}
@@ -95,30 +99,16 @@ func (c *CPUMetricProcessor) Start(ctx context.Context, _ component.Host) error 
 
 	// initialize metric builder
 	c.mb = metadata.NewMetricsBuilder(c.config.MetricsBuilderConfig, receiver.Settings{TelemetrySettings: c.settings.TelemetrySettings})
-	c.logger.Info("Started CPU Processor")
+	c.logger.Info("Started Memory Processor")
 	return nil
 }
 
-func newCPUMetricProcessor(
+func newMemoryMetricProcessor(
 	_ context.Context,
 	set processor.Settings,
 	cfg internal.Config,
 ) (internal.MetricProcessor, error) {
-
-	/*
-		metricFilter := map[string]bool{
-			"container.cpu.time":       true,
-			"system.cpu.time":          true,
-			"system.cpu.logical.count": true,
-			"system.cpu.utilization":   false,
-		}
-		stateFilter := map[string]bool{
-			"system": true,
-			"user":   true,
-		}
-	*/
-
-	return &CPUMetricProcessor{
+	return &MemoryMetricProcessor{
 		contracts: internal.NewContractState(),
 		config:    cfg.(*Config),
 		settings:  set,

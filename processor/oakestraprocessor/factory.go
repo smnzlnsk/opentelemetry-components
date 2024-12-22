@@ -6,6 +6,7 @@ import (
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/metadata"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/cpuprocessor"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/memoryprocessor"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/processor"
@@ -13,7 +14,8 @@ import (
 
 var (
 	processorFactories = map[string]internal.ProcessorFactory{
-		cpuprocessor.TypeStr: &cpuprocessor.Factory{},
+		cpuprocessor.TypeStr:    &cpuprocessor.Factory{},
+		memoryprocessor.TypeStr: &memoryprocessor.Factory{},
 	}
 )
 

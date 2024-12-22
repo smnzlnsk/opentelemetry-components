@@ -1,0 +1,24 @@
+type: oakestraprocessor/memory
+
+parent: oakestraprocessor
+
+resource_attributes:
+  service.name:
+    description: service name
+    type: string
+    enabled: true
+
+attributes:
+  state:
+    description: recorded states
+    type: string
+    enum: [ used, slab_reclaimable, slab_unreclaimable ]
+
+metrics:
+  service.memory.utilisation:
+    enabled: true
+    description: percentage of total memory used by service in certain state
+    unit: percent
+    gauge:
+      value_type: double
+    attributes: [ state ]
