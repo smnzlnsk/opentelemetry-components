@@ -56,9 +56,7 @@ func (c *ContractState) RegisterService(service string, contracts map[string]Cal
 	c.Contracts[service] = serviceContracts
 
 	for formula, contract := range c.Contracts[service] {
-		fmt.Printf("adding contract for service %s with formula %s:\n", service, formula)
 		neededMetrics := filterMetricsFromFormula(formula)
-		fmt.Printf("adding metrics to filter: %v\n", neededMetrics)
 		for metric, _ := range neededMetrics {
 
 			err := c.Filters.AddMetricFilter(metric, contract.States)
@@ -104,7 +102,6 @@ func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
 			if c.ContainerDatapoints[serviceName] == nil {
 				c.ContainerDatapoints[serviceName] = make(map[string]map[string]MetricDatapoint)
 			}
-			// fmt.Printf("Found container_id: %s\n", serviceName)
 			if _, ok := c.Contracts[serviceName]; !ok {
 				// if service is not registered, do nothing
 				continue
@@ -118,7 +115,6 @@ func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
 				mmetric := smetric.Metrics().At(k)
 				// if we expect metrics specific to a service, check metric name has correct prefix
 				if containerMetric && !strings.HasPrefix(mmetric.Name(), "container.") {
-					// fmt.Printf("ommiting container metric: %s\n", mmetric.Name())
 					continue
 				}
 
@@ -127,10 +123,8 @@ func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
 				if !ok {
 					continue
 				}
-				//fmt.Printf("found metric %s with stateFilter: %v\n", mmetric.Name(), metricFilter.StateFilter)
 
 				if c.SystemDatapoints[mmetric.Name()] == nil {
-					//fmt.Printf("intialising SystemDatapoints map for metric %s\n", mmetric.Name())
 					c.SystemDatapoints[mmetric.Name()] = make(map[string]MetricDatapoint)
 				}
 
@@ -138,7 +132,6 @@ func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
 				// verify we have states present in the filter
 				if statesPresent {
 					if metricFilter.StateFilter == nil {
-						//fmt.Printf("found more than one datapoint in metric: %s, while stateFilter is not set", mmetric.Name())
 						continue
 					}
 				}
@@ -154,12 +147,10 @@ func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
 					if !containerMetric {
 						// system metric
 						if !statesPresent {
-							//fmt.Printf("setting system metric %s and default state with value %f\n", mmetric.Name(), mdp.Value.FloatValue)
 							c.SystemDatapoints[mmetric.Name()]["default"] = mdp
 							continue
 						} else {
 							if v, ok := ndp.Attributes().Get("state"); ok && c.Filters.MetricFilters[mmetric.Name()].StateFilter[v.Str()] != 0 {
-								//fmt.Printf("setting system metric %s with state %s and value %f\n", mmetric.Name(), v.Str(), mdp.Value.FloatValue)
 								c.SystemDatapoints[mmetric.Name()][v.Str()] = mdp
 								continue
 							}
@@ -167,12 +158,10 @@ func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
 					} else {
 						// container metric
 						if !statesPresent {
-							//fmt.Printf("setting container metric %s and default state for service %s with value %f\n", mmetric.Name(), serviceName, mdp.Value.FloatValue)
 							c.ContainerDatapoints[serviceName][mmetric.Name()]["default"] = mdp
 							continue
 						} else {
 							if v, ok := ndp.Attributes().Get("state"); ok && c.Filters.MetricFilters[mmetric.Name()].StateFilter[v.Str()] != 0 {
-								//fmt.Printf("setting container metric %s and state %s for service %s with value %f\n", mmetric.Name(), v.Str(), serviceName, mdp.Value.FloatValue)
 								c.ContainerDatapoints[serviceName][mmetric.Name()][v.Str()] = mdp
 								continue
 							}
@@ -246,9 +235,9 @@ func (c *ContractState) Evaluate() CalculationResults {
 
 func (c *ContractState) GetParameters(cc CalculationContract) (res CalculationParameters) {
 	res = make(map[string]map[string]interface{})
-	for state, _ := range cc.States {
+	for state := range cc.States {
 		res[state] = make(map[string]interface{})
-		for metric, _ := range cc.Metrics {
+		for metric := range cc.Metrics {
 			if strings.HasPrefix(metric, "container.") {
 				// fetch from containerMetrics
 				res[state][metric] = c.ContainerDatapoints[cc.Service][metric][state].Value.FloatValue
@@ -257,7 +246,6 @@ func (c *ContractState) GetParameters(cc CalculationContract) (res CalculationPa
 			}
 		}
 	}
-	// fmt.Println("returning parameters:", res)
 	return
 }
 

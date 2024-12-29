@@ -20,18 +20,13 @@ func newFilter() *Filter {
 }
 
 func (f *Filter) AddMetricFilter(key string, states map[string]bool) error {
-	//fmt.Printf("setting metric filter for metric %s with states %v\n", key, states)
 	if mf, exists := f.MetricFilters[key]; exists {
 		// set states where necessary
-		//fmt.Printf("updating metric filters %v of service %s\n", states, key)
 		mf.addStates(states)
-		//fmt.Println("result:", key, mf)
 		return nil
 	}
-	//fmt.Printf("creating new metric filter for metric %s with states %v\n", key, states)
 	f.MetricFilters[key] = newMetricFilterStruct()
 	f.MetricFilters[key].addStates(states)
-	//fmt.Println("result:", key, f.MetricFilters[key])
 	return nil
 }
 
