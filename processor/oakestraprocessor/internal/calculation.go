@@ -2,14 +2,17 @@ package internal
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
+	"sync"
+
 	"github.com/Knetic/govaluate"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
-	"regexp"
-	"strings"
 )
 
 type ContractState struct {
+	sync.RWMutex
 	Contracts        map[string]map[string]CalculationContract // currently active contracts; map[service][formula]CalculcationContract
 	DefaultContracts map[string]CalculationContract
 	Filters          *Filter // filter metrics needed by contracts
@@ -30,19 +33,28 @@ func NewContractState() *ContractState {
 }
 
 func (c *ContractState) RegisterService(service string, contracts map[string]CalculationContract) error {
-	if c.Contracts[service] != nil {
+	c.Lock()
+	defer c.Unlock()
+
+	if _, exists := c.Contracts[service]; exists {
 		return fmt.Errorf("service %s already registered", service)
 	}
+
+	serviceContracts := make(map[string]CalculationContract, len(contracts)+len(c.DefaultContracts))
 	c.ContainerDatapoints[service] = make(map[string]map[string]MetricDatapoint)
-	c.Contracts[service] = contracts
+
 	for formula, contract := range c.DefaultContracts {
-		// add default contracts to service to be registered
-		// override service name
-		contract.Service = service
-		c.Contracts[service] = make(map[string]CalculationContract)
-		c.Contracts[service][formula] = contract
+		contractCopy := contract
+		contractCopy.Service = service
+		serviceContracts[formula] = contractCopy
 	}
-	// add filters for all contracts
+
+	for formula, contract := range contracts {
+		serviceContracts[formula] = contract
+	}
+
+	c.Contracts[service] = serviceContracts
+
 	for formula, contract := range c.Contracts[service] {
 		fmt.Printf("adding contract for service %s with formula %s:\n", service, formula)
 		neededMetrics := filterMetricsFromFormula(formula)
@@ -179,27 +191,57 @@ type CalculationParameters map[string]map[string]interface{}
 // CalculationResults map[service][formula][state]result
 type CalculationResults map[string]map[string]map[string]float64
 
-func (c *ContractState) Evaluate() (res CalculationResults) {
-	res = make(CalculationResults)
+func (c *ContractState) Evaluate() CalculationResults {
+	c.RLock()
+	defer c.RUnlock()
+
+	res := make(CalculationResults, len(c.Contracts))
+	var wg sync.WaitGroup
+	resultChan := make(chan struct {
+		service string
+		results map[string]map[string]float64
+	}, len(c.Contracts))
+
 	for service, formulae := range c.Contracts {
-		res[service] = make(map[string]map[string]float64)
-		for formula, contract := range formulae {
-			res[service][formula] = make(map[string]float64)
-			expression, err := govaluate.NewEvaluableExpression(formula)
-			if err != nil {
-				continue
-			}
-			params := c.GetParameters(contract)
-			for state, cp := range params {
-				result, err := expression.Evaluate(cp)
+		wg.Add(1)
+		go func(service string, formulae map[string]CalculationContract) {
+			defer wg.Done()
+			serviceResults := make(map[string]map[string]float64, len(formulae))
+
+			for formula, contract := range formulae {
+				expression, err := govaluate.NewEvaluableExpression(formula)
 				if err != nil {
-					fmt.Println(err)
+					continue
 				}
-				res[service][formula][state] = result.(float64)
+
+				params := c.GetParameters(contract)
+				stateResults := make(map[string]float64, len(params))
+
+				for state, cp := range params {
+					if result, err := expression.Evaluate(cp); err == nil {
+						stateResults[state] = result.(float64)
+					}
+				}
+				serviceResults[formula] = stateResults
 			}
-		}
+
+			resultChan <- struct {
+				service string
+				results map[string]map[string]float64
+			}{service, serviceResults}
+		}(service, formulae)
 	}
-	return
+
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	for result := range resultChan {
+		res[result.service] = result.results
+	}
+
+	return res
 }
 
 func (c *ContractState) GetParameters(cc CalculationContract) (res CalculationParameters) {
@@ -220,10 +262,12 @@ func (c *ContractState) GetParameters(cc CalculationContract) (res CalculationPa
 }
 
 // extract all necessary metrics from formula as a map to filter in the future
+var metricRegex = regexp.MustCompile(`\[(.*?)\]`)
+
 func filterMetricsFromFormula(formula string) map[string]bool {
-	res := make(map[string]bool)
-	re := regexp.MustCompile(`\[(.*?)\]`)
-	matches := re.FindAllStringSubmatch(formula, -1)
+	matches := metricRegex.FindAllStringSubmatch(formula, -1)
+	res := make(map[string]bool, len(matches))
+
 	for _, metricName := range matches {
 		if len(metricName) > 1 {
 			res[metricName[1]] = true

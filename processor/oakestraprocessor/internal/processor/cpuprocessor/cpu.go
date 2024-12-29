@@ -3,15 +3,17 @@ package cpuprocessor
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/cpuprocessor/internal/metadata"
+	pb "github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/proto"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/processor"
 	"go.opentelemetry.io/collector/receiver"
 	"go.uber.org/zap"
-	"time"
 )
 
 type CPUMetricProcessor struct {
@@ -84,15 +86,6 @@ func (c *CPUMetricProcessor) Start(ctx context.Context, _ component.Host) error 
 		return err
 	}
 
-	if err := c.contracts.RegisterService("monitoring.mon.nginx.test.instance.0", nil); err != nil {
-		fmt.Println("error registering service 0")
-	}
-	fmt.Println("registered service: monitoring.mon.nginx.test.instance.0")
-	if err := c.contracts.RegisterService("monitoring.mon.nginx.test.instance.1", nil); err != nil {
-		fmt.Println("error registering service 1")
-	}
-	fmt.Println("registered service: monitoring.mon.nginx.test.instance.1")
-
 	// initialize metric builder
 	c.mb = metadata.NewMetricsBuilder(c.config.MetricsBuilderConfig, receiver.Settings{TelemetrySettings: c.settings.TelemetrySettings})
 	c.logger.Info("Started CPU Processor")
@@ -124,4 +117,8 @@ func newCPUMetricProcessor(
 		settings:  set,
 		logger:    set.Logger,
 	}, nil
+}
+
+func (c *CPUMetricProcessor) RegisterService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo) error {
+	return c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), nil)
 }

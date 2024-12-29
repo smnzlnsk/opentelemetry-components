@@ -21,6 +21,7 @@ var (
 // Config represents the processor config settings within the collector's config.yaml
 type Config struct {
 	Processors map[string]internal.Config `mapstructure:"-"`
+	GRPCPort   int                       `mapstructure:"grpc_port"`
 }
 
 // Validate checks if the processor configuration is valid

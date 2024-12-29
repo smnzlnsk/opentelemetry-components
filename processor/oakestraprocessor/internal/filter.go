@@ -1,7 +1,5 @@
 package internal
 
-import "fmt"
-
 type MetricFilter interface {
 	AddMetricFilter(string) error
 	RemoveMetricFilter(string) error
@@ -22,18 +20,18 @@ func newFilter() *Filter {
 }
 
 func (f *Filter) AddMetricFilter(key string, states map[string]bool) error {
-	fmt.Printf("setting metric filter for metric %s with states %v\n", key, states)
+	//fmt.Printf("setting metric filter for metric %s with states %v\n", key, states)
 	if mf, exists := f.MetricFilters[key]; exists {
 		// set states where necessary
-		fmt.Printf("updating metric filters %v of service %s\n", states, key)
+		//fmt.Printf("updating metric filters %v of service %s\n", states, key)
 		mf.addStates(states)
-		fmt.Println("result:", key, mf)
+		//fmt.Println("result:", key, mf)
 		return nil
 	}
-	fmt.Printf("creating new metric filter for metric %s with states %v\n", key, states)
+	//fmt.Printf("creating new metric filter for metric %s with states %v\n", key, states)
 	f.MetricFilters[key] = newMetricFilterStruct()
 	f.MetricFilters[key].addStates(states)
-	fmt.Println("result:", key, f.MetricFilters[key])
+	//fmt.Println("result:", key, f.MetricFilters[key])
 	return nil
 }
 
@@ -46,19 +44,15 @@ type MetricFilterStruct struct {
 }
 
 func (mfs MetricFilterStruct) addStates(states map[string]bool) {
-	for state, _ := range states {
-		if _, exists := mfs.StateFilter[state]; exists {
-			// increase counter of active filters for state
-			mfs.StateFilter[state]++
-		} else {
-			// initialise counter for given state
-			mfs.StateFilter[state] = 1
-		}
+	for state := range states {
+		// directly increment the counter
+		// if uninitialized, it will be initialized with 0
+		mfs.StateFilter[state]++
 	}
 }
 
 func (mfs MetricFilterStruct) removeStates(states map[string]bool) {
-	for state, _ := range states {
+	for state := range states {
 		if _, exists := mfs.StateFilter[state]; exists {
 			mfs.StateFilter[state]--
 			// remove the key, if it is not active anymore

@@ -3,7 +3,9 @@ package oakestraprocessor // import github.com/smnzlnsk/opentelemetry-components
 import (
 	"context"
 	"fmt"
+
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
+	pb "github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/proto"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -18,6 +20,7 @@ type MultiProcessor struct {
 	next       consumer.Metrics
 	logger     *zap.Logger
 	cancel     context.CancelFunc
+	grpcServer *GRPCServer
 }
 
 func newMultiProcessor(ctx context.Context, set processor.Settings, cfg *Config, next consumer.Metrics) *MultiProcessor {
@@ -26,12 +29,17 @@ func newMultiProcessor(ctx context.Context, set processor.Settings, cfg *Config,
 		set.Logger.Error(err.Error())
 		return nil
 	}
-	proc := MultiProcessor{
+
+	proc := &MultiProcessor{
 		processors: p,
 		next:       next,
 		logger:     set.Logger,
 	}
-	return &proc
+
+	// Initialize gRPC server
+	proc.grpcServer = NewGRPCServer(proc, cfg.GRPCPort)
+
+	return proc
 }
 
 func createProcessors(
@@ -73,12 +81,17 @@ func createProcessor(
 
 func (p *MultiProcessor) Start(ctx context.Context, host component.Host) error {
 	p.logger.Info("Starting Oakestra Processor")
-	ctx, cancel := context.WithCancel(context.Background())
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithCancel(ctx)
 	p.cancel = cancel
 
+	// Start gRPC server
+	if err := p.grpcServer.Start(); err != nil {
+		return fmt.Errorf("failed to start gRPC server: %w", err)
+	}
+
 	for _, subp := range p.processors {
-		err := subp.Start(ctx, host)
-		if err != nil {
+		if err := subp.Start(ctx, host); err != nil {
 			return err
 		}
 	}
@@ -88,9 +101,14 @@ func (p *MultiProcessor) Start(ctx context.Context, host component.Host) error {
 
 func (p *MultiProcessor) Shutdown(ctx context.Context) error {
 	p.logger.Info("Shutting down Oakestra Processor")
+
+	// Stop gRPC server
+	if p.grpcServer != nil {
+		p.grpcServer.Stop()
+	}
+
 	for _, subp := range p.processors {
-		err := subp.Shutdown(ctx)
-		if err != nil {
+		if err := subp.Shutdown(ctx); err != nil {
 			return err
 		}
 	}
@@ -116,6 +134,16 @@ func (p *MultiProcessor) ConsumeMetrics(ctx context.Context, metrics pmetric.Met
 	err := p.next.ConsumeMetrics(ctx, metrics)
 	if err != nil {
 		p.logger.Error("failed to consume metrics", zap.Error(err))
+	}
+	return nil
+}
+
+func (p *MultiProcessor) registerService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo) error {
+	for _, subp := range p.processors {
+		err := subp.RegisterService(serviceName, instanceNumber, resource)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
