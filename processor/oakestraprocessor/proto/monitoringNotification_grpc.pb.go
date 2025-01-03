@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	MonitoringService_NotifyDeployment_FullMethodName = "/monitoring.MonitoringService/NotifyDeployment"
+	MonitoringService_NotifyDeletion_FullMethodName   = "/monitoring.MonitoringService/NotifyDeletion"
 )
 
 // MonitoringServiceClient is the client API for MonitoringService service.
@@ -28,7 +29,8 @@ const (
 //
 // Service definition
 type MonitoringServiceClient interface {
-	NotifyDeployment(ctx context.Context, in *MonitoringRequest, opts ...grpc.CallOption) (*MonitoringResponse, error)
+	NotifyDeployment(ctx context.Context, in *MonitoringDeploymentRequest, opts ...grpc.CallOption) (*MonitoringResponse, error)
+	NotifyDeletion(ctx context.Context, in *MonitoringDeletionRequest, opts ...grpc.CallOption) (*MonitoringResponse, error)
 }
 
 type monitoringServiceClient struct {
@@ -39,10 +41,20 @@ func NewMonitoringServiceClient(cc grpc.ClientConnInterface) MonitoringServiceCl
 	return &monitoringServiceClient{cc}
 }
 
-func (c *monitoringServiceClient) NotifyDeployment(ctx context.Context, in *MonitoringRequest, opts ...grpc.CallOption) (*MonitoringResponse, error) {
+func (c *monitoringServiceClient) NotifyDeployment(ctx context.Context, in *MonitoringDeploymentRequest, opts ...grpc.CallOption) (*MonitoringResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MonitoringResponse)
 	err := c.cc.Invoke(ctx, MonitoringService_NotifyDeployment_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *monitoringServiceClient) NotifyDeletion(ctx context.Context, in *MonitoringDeletionRequest, opts ...grpc.CallOption) (*MonitoringResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MonitoringResponse)
+	err := c.cc.Invoke(ctx, MonitoringService_NotifyDeletion_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +67,8 @@ func (c *monitoringServiceClient) NotifyDeployment(ctx context.Context, in *Moni
 //
 // Service definition
 type MonitoringServiceServer interface {
-	NotifyDeployment(context.Context, *MonitoringRequest) (*MonitoringResponse, error)
+	NotifyDeployment(context.Context, *MonitoringDeploymentRequest) (*MonitoringResponse, error)
+	NotifyDeletion(context.Context, *MonitoringDeletionRequest) (*MonitoringResponse, error)
 	mustEmbedUnimplementedMonitoringServiceServer()
 }
 
@@ -66,8 +79,11 @@ type MonitoringServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedMonitoringServiceServer struct{}
 
-func (UnimplementedMonitoringServiceServer) NotifyDeployment(context.Context, *MonitoringRequest) (*MonitoringResponse, error) {
+func (UnimplementedMonitoringServiceServer) NotifyDeployment(context.Context, *MonitoringDeploymentRequest) (*MonitoringResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method NotifyDeployment not implemented")
+}
+func (UnimplementedMonitoringServiceServer) NotifyDeletion(context.Context, *MonitoringDeletionRequest) (*MonitoringResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method NotifyDeletion not implemented")
 }
 func (UnimplementedMonitoringServiceServer) mustEmbedUnimplementedMonitoringServiceServer() {}
 func (UnimplementedMonitoringServiceServer) testEmbeddedByValue()                           {}
@@ -91,7 +107,7 @@ func RegisterMonitoringServiceServer(s grpc.ServiceRegistrar, srv MonitoringServ
 }
 
 func _MonitoringService_NotifyDeployment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(MonitoringRequest)
+	in := new(MonitoringDeploymentRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -103,7 +119,25 @@ func _MonitoringService_NotifyDeployment_Handler(srv interface{}, ctx context.Co
 		FullMethod: MonitoringService_NotifyDeployment_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MonitoringServiceServer).NotifyDeployment(ctx, req.(*MonitoringRequest))
+		return srv.(MonitoringServiceServer).NotifyDeployment(ctx, req.(*MonitoringDeploymentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MonitoringService_NotifyDeletion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MonitoringDeletionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MonitoringServiceServer).NotifyDeletion(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MonitoringService_NotifyDeletion_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MonitoringServiceServer).NotifyDeletion(ctx, req.(*MonitoringDeletionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -118,6 +152,10 @@ var MonitoringService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "NotifyDeployment",
 			Handler:    _MonitoringService_NotifyDeployment_Handler,
+		},
+		{
+			MethodName: "NotifyDeletion",
+			Handler:    _MonitoringService_NotifyDeletion_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
