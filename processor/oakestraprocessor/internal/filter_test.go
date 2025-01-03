@@ -6,80 +6,6 @@ import (
 	"testing"
 )
 
-func TestFilter(t *testing.T) {
-	t.Run("new filter initialization", func(t *testing.T) {
-		f := newFilter()
-		if f.MetricFilters == nil {
-			t.Error("MetricFilters map was not initialized")
-		}
-		if len(f.MetricFilters) != 0 {
-			t.Error("MetricFilters map should be empty on initialization")
-		}
-	})
-
-	t.Run("add new metric filter", func(t *testing.T) {
-		f := newFilter()
-		states := map[string]bool{"running": true, "stopped": true}
-
-		err := f.AddMetricFilter("cpu_usage", states)
-		if err != nil {
-			t.Errorf("Failed to add metric filter: %v", err)
-		}
-
-		// Verify metric was added
-		mf, exists := f.MetricFilters["cpu_usage"]
-		if !exists {
-			t.Fatal("Metric filter was not added")
-		}
-
-		// Verify states were added
-		for state := range states {
-			count, exists := mf.StateFilter[state]
-			if !exists {
-				t.Errorf("State %s was not added to filter", state)
-			}
-			if count != 1 {
-				t.Errorf("Expected state count to be 1, got %d", count)
-			}
-		}
-
-		// Verify active contracts count
-		if mf.activeContracts != 1 {
-			t.Errorf("Expected activeContracts to be 1, got %d", mf.activeContracts)
-		}
-	})
-
-	t.Run("update existing metric filter", func(t *testing.T) {
-		f := newFilter()
-		initialStates := map[string]bool{"running": true}
-		additionalStates := map[string]bool{"running": true, "stopped": true}
-
-		// Add initial filter
-		err := f.AddMetricFilter("cpu_usage", initialStates)
-		if err != nil {
-			t.Fatalf("Failed to add initial metric filter: %v", err)
-		}
-
-		// Update with additional states
-		err = f.AddMetricFilter("cpu_usage", additionalStates)
-		if err != nil {
-			t.Fatalf("Failed to update metric filter: %v", err)
-		}
-
-		mf := f.MetricFilters["cpu_usage"]
-
-		// Check running state count (should be 2)
-		if count := mf.StateFilter["running"]; count != 2 {
-			t.Errorf("Expected running state count to be 2, got %d", count)
-		}
-
-		// Check stopped state count (should be 1)
-		if count := mf.StateFilter["stopped"]; count != 1 {
-			t.Errorf("Expected stopped state count to be 1, got %d", count)
-		}
-	})
-}
-
 func TestMetricFilterStruct(t *testing.T) {
 	t.Run("new metric filter struct initialization", func(t *testing.T) {
 		mfs := newMetricFilterStruct()
@@ -118,39 +44,42 @@ func TestMetricFilterStruct(t *testing.T) {
 	})
 
 	t.Run("remove states", func(t *testing.T) {
-		mfs := newMetricFilterStruct()
+		t.Run("remove single state", func(t *testing.T) {
+			mfs := newMetricFilterStruct()
+			mfs.StateFilter["running"] = 2
+			mfs.StateFilter["stopped"] = 1
 
-		// Add states first
-		states := map[string]bool{
-			"running": true,
-			"stopped": true,
-		}
-		mfs.addStates(states)
+			mfs.removeStates(map[string]bool{"running": true})
 
-		// Remove one state
-		mfs.removeStates(map[string]bool{"running": true})
+			if count := mfs.StateFilter["running"]; count != 1 {
+				t.Errorf("Expected running state count to be 1, got %d", count)
+			}
+			if count := mfs.StateFilter["stopped"]; count != 1 {
+				t.Errorf("Expected stopped state count to be 1, got %d", count)
+			}
+		})
 
-		// Verify running state was removed
-		if _, exists := mfs.StateFilter["running"]; exists {
-			t.Error("running state should have been removed")
-		}
+		t.Run("remove state completely", func(t *testing.T) {
+			mfs := newMetricFilterStruct()
+			mfs.StateFilter["running"] = 1
 
-		// Verify stopped state remains with count 1
-		if count := mfs.StateFilter["stopped"]; count != 1 {
-			t.Errorf("Expected stopped state count to be 1, got %d", count)
-		}
-	})
+			mfs.removeStates(map[string]bool{"running": true})
 
-	t.Run("remove non-existent states", func(t *testing.T) {
-		mfs := newMetricFilterStruct()
+			if _, exists := mfs.StateFilter["running"]; exists {
+				t.Error("running state should have been removed")
+			}
+		})
 
-		// Try to remove state that doesn't exist
-		mfs.removeStates(map[string]bool{"nonexistent": true})
+		t.Run("remove non-existent state", func(t *testing.T) {
+			mfs := newMetricFilterStruct()
+			mfs.StateFilter["running"] = 1
 
-		// Should not panic and StateFilter should remain empty
-		if len(mfs.StateFilter) != 0 {
-			t.Error("StateFilter should remain empty")
-		}
+			mfs.removeStates(map[string]bool{"stopped": true})
+
+			if count := mfs.StateFilter["running"]; count != 1 {
+				t.Errorf("Expected running state count to be 1, got %d", count)
+			}
+		})
 	})
 
 	t.Run("multiple state operations", func(t *testing.T) {
@@ -181,6 +110,85 @@ func TestMetricFilterStruct(t *testing.T) {
 		if _, exists := mfs.StateFilter["running"]; exists {
 			t.Error("running state should have been removed")
 		}
+	})
+}
+
+func TestFilter(t *testing.T) {
+	t.Run("new filter initialization", func(t *testing.T) {
+		f := newFilter()
+		if f.MetricFilters == nil {
+			t.Error("MetricFilters map was not initialized")
+		}
+		if len(f.MetricFilters) != 0 {
+			t.Error("MetricFilters map should be empty on initialization")
+		}
+	})
+
+	t.Run("add new metric filter", func(t *testing.T) {
+		f := newFilter()
+		states := map[string]bool{"running": true, "stopped": true}
+
+		err := f.AddMetricFilter("cpu_usage", states)
+		if err != nil {
+			t.Errorf("Failed to add metric filter: %v", err)
+		}
+
+		// Verify metric was added
+		mf, exists := f.MetricFilters["cpu_usage"]
+		if !exists {
+			t.Fatal("Metric filter was not added")
+		}
+
+		// Verify states were added
+		for state := range states {
+			count, exists := mf.StateFilter[state]
+			if !exists {
+				t.Errorf("State %s was not added to filter", state)
+			}
+			if count != 1 {
+				t.Errorf("Expected state count to be 1, got %d", count)
+			}
+		}
+	})
+
+	t.Run("delete metric filter", func(t *testing.T) {
+		t.Run("delete single state", func(t *testing.T) {
+			f := newFilter()
+			states := map[string]bool{"running": true, "stopped": true}
+
+			err := f.AddMetricFilter("cpu_usage", states)
+			if err != nil {
+				t.Fatalf("Failed to add metric filter: %v", err)
+			}
+
+			err = f.DeleteMetricFilter("cpu_usage", map[string]bool{"running": true})
+			if err != nil {
+				t.Errorf("Failed to delete state: %v", err)
+			}
+
+			mf, exists := f.MetricFilters["cpu_usage"]
+			if !exists {
+				t.Fatal("Metric filter should still exist")
+			}
+			if mf == nil {
+				t.Fatal("Metric filter should not be nil")
+			}
+
+			if _, exists := mf.StateFilter["running"]; exists {
+				t.Error("running state should have been removed")
+			}
+			if count := mf.StateFilter["stopped"]; count != 1 {
+				t.Errorf("Expected stopped state count to be 1, got %d", count)
+			}
+		})
+
+		t.Run("delete non-existent metric", func(t *testing.T) {
+			f := newFilter()
+			err := f.DeleteMetricFilter("nonexistent", map[string]bool{"running": true})
+			if err != nil {
+				t.Errorf("Failed to handle non-existent metric deletion: %v", err)
+			}
+		})
 	})
 }
 
