@@ -98,19 +98,6 @@ func newCPUMetricProcessor(
 	cfg internal.Config,
 ) (internal.MetricProcessor, error) {
 
-	/*
-		metricFilter := map[string]bool{
-			"container.cpu.time":       true,
-			"system.cpu.time":          true,
-			"system.cpu.logical.count": true,
-			"system.cpu.utilization":   false,
-		}
-		stateFilter := map[string]bool{
-			"system": true,
-			"user":   true,
-		}
-	*/
-
 	return &CPUMetricProcessor{
 		contracts: internal.NewContractState(),
 		config:    cfg.(*Config),
