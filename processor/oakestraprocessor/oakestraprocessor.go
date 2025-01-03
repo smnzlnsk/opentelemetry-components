@@ -147,3 +147,13 @@ func (p *MultiProcessor) registerService(serviceName string, instanceNumber int3
 	}
 	return nil
 }
+
+func (p *MultiProcessor) deleteService(serviceName string, instanceNumber int32) error {
+	for _, subp := range p.processors {
+		err := subp.DeleteService(serviceName, instanceNumber)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}

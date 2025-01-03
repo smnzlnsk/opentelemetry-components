@@ -22,4 +22,5 @@ type MetricProcessor interface {
 	ProcessMetrics(pmetric.Metrics) error
 	Shutdown(context.Context) error
 	RegisterService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo) error
+	DeleteService(serviceName string, instanceNumber int32) error
 }

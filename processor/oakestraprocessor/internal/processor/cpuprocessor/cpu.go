@@ -122,3 +122,7 @@ func newCPUMetricProcessor(
 func (c *CPUMetricProcessor) RegisterService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo) error {
 	return c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), nil)
 }
+
+func (c *CPUMetricProcessor) DeleteService(serviceName string, instanceNumber int32) error {
+	return c.contracts.DeleteService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber))
+}

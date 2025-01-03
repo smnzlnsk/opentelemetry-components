@@ -10,12 +10,12 @@ type MetricFilter interface {
 type Filter struct {
 	// used to extract a set of metrics for calculations
 	// read: map[metric]MetricFilterStruct
-	MetricFilters map[string]MetricFilterStruct
+	MetricFilters map[string]*MetricFilterStruct
 }
 
 func newFilter() *Filter {
 	return &Filter{
-		MetricFilters: make(map[string]MetricFilterStruct),
+		MetricFilters: make(map[string]*MetricFilterStruct),
 	}
 }
 
@@ -25,8 +25,27 @@ func (f *Filter) AddMetricFilter(key string, states map[string]bool) error {
 		mf.addStates(states)
 		return nil
 	}
-	f.MetricFilters[key] = newMetricFilterStruct()
-	f.MetricFilters[key].addStates(states)
+	mfs := newMetricFilterStruct()
+	mfs.addStates(states)
+	f.MetricFilters[key] = mfs
+	return nil
+}
+
+func (f *Filter) DeleteMetricFilter(key string, states map[string]bool) error {
+	if mfs, exists := f.MetricFilters[key]; exists {
+		// First remove states
+		mfs.removeStates(states)
+
+		// Only decrement activeContracts if all states are removed
+		if len(mfs.StateFilter) == 0 {
+			mfs.activeContracts--
+
+			// If no more active contracts, delete the entire metric filter
+			if mfs.activeContracts <= 0 {
+				delete(f.MetricFilters, key)
+			}
+		}
+	}
 	return nil
 }
 
@@ -38,19 +57,16 @@ type MetricFilterStruct struct {
 	StateFilter map[string]int
 }
 
-func (mfs MetricFilterStruct) addStates(states map[string]bool) {
+func (mfs *MetricFilterStruct) addStates(states map[string]bool) {
 	for state := range states {
-		// directly increment the counter
-		// if uninitialized, it will be initialized with 0
 		mfs.StateFilter[state]++
 	}
 }
 
-func (mfs MetricFilterStruct) removeStates(states map[string]bool) {
+func (mfs *MetricFilterStruct) removeStates(states map[string]bool) {
 	for state := range states {
 		if _, exists := mfs.StateFilter[state]; exists {
 			mfs.StateFilter[state]--
-			// remove the key, if it is not active anymore
 			if mfs.StateFilter[state] <= 0 {
 				delete(mfs.StateFilter, state)
 			}
@@ -58,10 +74,10 @@ func (mfs MetricFilterStruct) removeStates(states map[string]bool) {
 	}
 }
 
-func newMetricFilterStruct() MetricFilterStruct {
+func newMetricFilterStruct() *MetricFilterStruct {
 	mfs := MetricFilterStruct{
 		activeContracts: 1,
 		StateFilter:     make(map[string]int),
 	}
-	return mfs
+	return &mfs
 }

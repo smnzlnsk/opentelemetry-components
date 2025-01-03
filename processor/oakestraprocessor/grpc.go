@@ -73,12 +73,11 @@ func (g *GRPCServer) Stop() {
 	}
 }
 
-func (s *monitoringServer) NotifyDeployment(ctx context.Context, req *pb.MonitoringRequest) (*pb.MonitoringResponse, error) {
+func (s *monitoringServer) NotifyDeployment(ctx context.Context, req *pb.MonitoringDeploymentRequest) (*pb.MonitoringResponse, error) {
 	s.logger.Info("Received deployment",
 		zap.String("job_name", req.JobName),
+		zap.String("job_hash", req.JobHash),
 		zap.Int32("instance_number", req.InstanceNumber),
-		zap.String("resource_id", req.Resource.ResourceId),
-		zap.String("storage", req.Resource.Storage),
 		zap.String("cpu", req.Resource.Cpu),
 		zap.String("memory", req.Resource.Memory),
 		zap.String("gpu", req.Resource.Gpu),
@@ -92,5 +91,16 @@ func (s *monitoringServer) NotifyDeployment(ctx context.Context, req *pb.Monitor
 	return &pb.MonitoringResponse{
 		Acknowledged: true,
 		Message:      "Successfully processed deployment",
+	}, nil
+}
+
+func (s *monitoringServer) NotifyDeletion(ctx context.Context, req *pb.MonitoringDeletionRequest) (*pb.MonitoringResponse, error) {
+	s.logger.Info("Received deletion", zap.String("job_name", req.JobName), zap.Int32("instance_number", req.InstanceNumber))
+
+	s.proc.deleteService(req.JobName, req.InstanceNumber)
+
+	return &pb.MonitoringResponse{
+		Acknowledged: true,
+		Message:      "Successfully processed deletion",
 	}, nil
 }

@@ -57,7 +57,7 @@ func (c *ContractState) RegisterService(service string, contracts map[string]Cal
 
 	for formula, contract := range c.Contracts[service] {
 		neededMetrics := filterMetricsFromFormula(formula)
-		for metric, _ := range neededMetrics {
+		for metric := range neededMetrics {
 
 			err := c.Filters.AddMetricFilter(metric, contract.States)
 			if err != nil {
@@ -66,6 +66,28 @@ func (c *ContractState) RegisterService(service string, contracts map[string]Cal
 			c.ContainerDatapoints[service][metric] = make(map[string]MetricDatapoint)
 		}
 	}
+	return nil
+}
+
+func (c *ContractState) DeleteService(service string) error {
+	c.Lock()
+	defer c.Unlock()
+
+	// Clean up metric filters for all contracts of this service
+	if contracts, exists := c.Contracts[service]; exists {
+		for formula, contract := range contracts {
+			// Get metrics from formula
+			neededMetrics := filterMetricsFromFormula(formula)
+			// Delete filters for each metric
+			for metric := range neededMetrics {
+				c.Filters.DeleteMetricFilter(metric, contract.States)
+			}
+		}
+	}
+
+	// Delete service data
+	delete(c.Contracts, service)
+	delete(c.ContainerDatapoints, service)
 	return nil
 }
 
