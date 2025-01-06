@@ -1,0 +1,9 @@
+type: oakestraprocessor/application
+
+parent: oakestraprocessor
+
+resource_attributes:
+  service.name:
+    description: service name
+    type: string
+    enabled: true
