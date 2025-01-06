@@ -3,13 +3,14 @@ package httpreceiver // import github.com/smnzlnsk/opentelemetry-components/rece
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
 	"go.uber.org/zap"
-	"io"
-	"net/http"
 )
 
 var _ receiver.Metrics = (*httpReceiver)(nil)
@@ -33,8 +34,7 @@ func newHTTPReceiver(cfg *Config, logger *zap.Logger, consumer consumer.Metrics)
 }
 
 func (hr *httpReceiver) Start(ctx context.Context, host component.Host) error {
-	ctx = context.Background()
-	ctx, hr.cancel = context.WithCancel(ctx)
+	_, hr.cancel = context.WithCancel(ctx)
 	marshaler, err := newMarshaler()
 	if err != nil {
 		return err
@@ -56,17 +56,9 @@ func (hr *httpReceiver) Shutdown(ctx context.Context) error {
 
 func (hr *httpReceiver) ConsumeMetrics(ctx context.Context, metrics pmetric.Metrics) error {
 	if hr.consumer == nil {
-		hr.logger.Error("no next consumer available, dropping metric data")
-		return nil
+		return fmt.Errorf("no consumer available to receive metrics")
 	}
-
-	err := hr.consumer.ConsumeMetrics(ctx, metrics)
-	if err != nil {
-		hr.logger.Error("failed to forward metric data", zap.Error(err))
-		return err
-	}
-	hr.logger.Debug("successfully consumed metric data")
-	return nil
+	return hr.consumer.ConsumeMetrics(ctx, metrics)
 }
 
 func (hr *httpReceiver) startHTTPServer() {
@@ -103,8 +95,8 @@ func (hr *httpReceiver) metricsHandler(w http.ResponseWriter, r *http.Request) {
 		hr.logger.Error("failed to unmarshal metrics", zap.Error(err))
 		return
 	}
-	err = hr.consumer.ConsumeMetrics(r.Context(), metrics)
-	if err != nil {
+
+	if err := hr.consumer.ConsumeMetrics(r.Context(), metrics); err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		hr.logger.Error("failed to consume metrics", zap.Error(err))
 		return
