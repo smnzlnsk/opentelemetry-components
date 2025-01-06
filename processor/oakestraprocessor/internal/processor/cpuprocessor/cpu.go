@@ -74,7 +74,7 @@ func (c *CPUMetricProcessor) Shutdown(_ context.Context) error {
 }
 
 func (c *CPUMetricProcessor) Start(ctx context.Context, _ component.Host) error {
-	ctx, c.cancel = context.WithCancel(ctx)
+	_, c.cancel = context.WithCancel(ctx)
 
 	// initialize default contracts
 	if err := c.contracts.GenerateDefaultContract(
@@ -107,7 +107,7 @@ func newCPUMetricProcessor(
 }
 
 func (c *CPUMetricProcessor) RegisterService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo) error {
-	return c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), nil)
+	return c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), map[string]internal.CalculationContract{})
 }
 
 func (c *CPUMetricProcessor) DeleteService(serviceName string, instanceNumber int32) error {

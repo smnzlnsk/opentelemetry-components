@@ -52,9 +52,9 @@ func newApplicationMetricProcessor(
 }
 
 func (c *ApplicationMetricProcessor) RegisterService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo) error {
-	return c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), nil)
+	return c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), map[string]internal.CalculationContract{})
 }
 
 func (c *ApplicationMetricProcessor) DeleteService(serviceName string, instanceNumber int32) error {
-	return nil
+	return c.contracts.DeleteService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber))
 }

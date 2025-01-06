@@ -1,5 +1,7 @@
 package internal
 
+import "sync"
+
 type MetricFilter interface {
 	AddMetricFilter(string) error
 	RemoveMetricFilter(string) error
@@ -21,6 +23,8 @@ func newFilter() *Filter {
 
 func (f *Filter) AddMetricFilter(key string, states map[string]bool) error {
 	if mf, exists := f.MetricFilters[key]; exists {
+		// Increment activeContracts for overlapping metrics
+		mf.activeContracts++
 		// set states where necessary
 		mf.addStates(states)
 		return nil
@@ -50,26 +54,26 @@ func (f *Filter) DeleteMetricFilter(key string, states map[string]bool) error {
 }
 
 type MetricFilterStruct struct {
-	// will be relevant for deletion
-	// amount of contracts using this filter
+	mu              sync.RWMutex
 	activeContracts int
-	// read map[state]filterCount
-	StateFilter map[string]int
+	StateFilter     map[string]int
 }
 
 func (mfs *MetricFilterStruct) addStates(states map[string]bool) {
+	mfs.mu.Lock()
+	defer mfs.mu.Unlock()
 	for state := range states {
 		mfs.StateFilter[state]++
 	}
 }
 
 func (mfs *MetricFilterStruct) removeStates(states map[string]bool) {
+	mfs.mu.Lock()
+	defer mfs.mu.Unlock()
 	for state := range states {
-		if _, exists := mfs.StateFilter[state]; exists {
-			mfs.StateFilter[state]--
-			if mfs.StateFilter[state] <= 0 {
-				delete(mfs.StateFilter, state)
-			}
+		mfs.StateFilter[state]--
+		if mfs.StateFilter[state] <= 0 {
+			delete(mfs.StateFilter, state)
 		}
 	}
 }

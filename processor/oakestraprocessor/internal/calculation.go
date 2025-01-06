@@ -11,77 +11,122 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric"
 )
 
+type ContractKey struct {
+	Service string
+	Formula string
+}
+
+type DatapointKey struct {
+	Service string // empty for system metrics
+	Metric  string
+	State   string
+}
+
 type ContractState struct {
 	sync.RWMutex
-	Contracts        map[string]map[string]CalculationContract // currently active contracts; map[service][formula]CalculcationContract
-	DefaultContracts map[string]CalculationContract
-	Filters          *Filter // filter metrics needed by contracts
-	// read: [metric][state]MetricDatapoint
-	SystemDatapoints map[string]map[string]MetricDatapoint
-	// read: [service][metric][state]MetricDatapoint
-	ContainerDatapoints map[string]map[string]map[string]MetricDatapoint
-	compiledExpressions map[string]map[string]*govaluate.EvaluableExpression // map[service][formula]*Expression
+	Contracts           map[ContractKey]CalculationContract
+	Filters             *Filter
+	Datapoints          map[DatapointKey]MetricDatapoint
+	compiledExpressions map[ContractKey]*govaluate.EvaluableExpression
 }
 
 func NewContractState() *ContractState {
 	return &ContractState{
-		Contracts:           make(map[string]map[string]CalculationContract),
-		DefaultContracts:    make(map[string]CalculationContract),
+		Contracts:           make(map[ContractKey]CalculationContract),
 		Filters:             newFilter(),
-		SystemDatapoints:    make(map[string]map[string]MetricDatapoint),
-		ContainerDatapoints: make(map[string]map[string]map[string]MetricDatapoint),
-		compiledExpressions: make(map[string]map[string]*govaluate.EvaluableExpression),
+		Datapoints:          make(map[DatapointKey]MetricDatapoint),
+		compiledExpressions: make(map[ContractKey]*govaluate.EvaluableExpression),
 	}
+}
+
+func (c *ContractState) GenerateDefaultContract(formula string, states map[string]bool) error {
+	expr, err := govaluate.NewEvaluableExpression(formula)
+	if err != nil {
+		return fmt.Errorf("invalid formula %s: %w", formula, err)
+	}
+
+	key := ContractKey{
+		Service: "default",
+		Formula: formula,
+	}
+
+	contract := CalculationContract{
+		Formula: formula,
+		Service: "default",
+		States:  states,
+		Metrics: filterMetricsFromFormula(formula),
+	}
+
+	c.Contracts[key] = contract
+	c.compiledExpressions[key] = expr
+
+	return nil
 }
 
 func (c *ContractState) RegisterService(service string, contracts map[string]CalculationContract) error {
 	c.Lock()
 	defer c.Unlock()
 
-	if _, exists := c.Contracts[service]; exists {
-		return fmt.Errorf("service %s already registered", service)
+	if service == "" {
+		return fmt.Errorf("service name cannot be empty")
 	}
 
-	// Pre-compile expressions for the service
-	compiledExprs := make(map[string]*govaluate.EvaluableExpression)
-	serviceContracts := make(map[string]CalculationContract, len(contracts)+len(c.DefaultContracts))
-	c.ContainerDatapoints[service] = make(map[string]map[string]MetricDatapoint)
+	if contracts == nil {
+		return fmt.Errorf("contracts map cannot be nil")
+	}
 
-	// First compile default contracts
-	for formula, contract := range c.DefaultContracts {
-		expr, err := govaluate.NewEvaluableExpression(formula)
-		if err != nil {
-			return fmt.Errorf("invalid default formula %s: %w", formula, err)
+	// Check if service already exists
+	for key := range c.Contracts {
+		if key.Service == service {
+			return fmt.Errorf("service %s already registered", service)
 		}
-		compiledExprs[formula] = expr
-
-		contractCopy := contract
-		contractCopy.Service = service
-		serviceContracts[formula] = contractCopy
 	}
 
-	// Then compile service-specific contracts
+	// First register default contracts for this service
+	for key, contract := range c.Contracts {
+		if key.Service == "default" {
+			serviceKey := ContractKey{
+				Service: service,
+				Formula: key.Formula,
+			}
+
+			serviceContract := contract
+			serviceContract.Service = service
+
+			expr, err := govaluate.NewEvaluableExpression(key.Formula)
+			if err != nil {
+				return fmt.Errorf("invalid formula %s: %w", key.Formula, err)
+			}
+
+			c.Contracts[serviceKey] = serviceContract
+			c.compiledExpressions[serviceKey] = expr
+
+			// Update filters for default contract metrics
+			for metric := range serviceContract.Metrics {
+				if err := c.Filters.AddMetricFilter(metric, serviceContract.States); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// Then register service-specific contracts
 	for formula, contract := range contracts {
+		key := ContractKey{Service: service, Formula: formula}
+
 		expr, err := govaluate.NewEvaluableExpression(formula)
 		if err != nil {
 			return fmt.Errorf("invalid formula %s: %w", formula, err)
 		}
-		compiledExprs[formula] = expr
-		serviceContracts[formula] = contract
-	}
 
-	c.compiledExpressions[service] = compiledExprs
-	c.Contracts[service] = serviceContracts
+		c.Contracts[key] = contract
+		c.compiledExpressions[key] = expr
 
-	for formula, contract := range c.Contracts[service] {
-		neededMetrics := filterMetricsFromFormula(formula)
-		for metric := range neededMetrics {
-
-			err := c.Filters.AddMetricFilter(metric, contract.States)
-			if err != nil {
+		// Update filters
+		for metric := range contract.Metrics {
+			if err := c.Filters.AddMetricFilter(metric, contract.States); err != nil {
 				return err
 			}
-			c.ContainerDatapoints[service][metric] = make(map[string]MetricDatapoint)
 		}
 	}
 	return nil
@@ -91,37 +136,50 @@ func (c *ContractState) DeleteService(service string) error {
 	c.Lock()
 	defer c.Unlock()
 
-	// Clean up metric filters for all contracts of this service
-	if contracts, exists := c.Contracts[service]; exists {
-		for formula, contract := range contracts {
-			// Get metrics from formula
-			neededMetrics := filterMetricsFromFormula(formula)
-			// Delete filters for each metric
-			for metric := range neededMetrics {
+	if service == "default" {
+		return fmt.Errorf("cannot delete default contracts")
+	}
+
+	// Clean up metric filters and contracts
+	for key, contract := range c.Contracts {
+		if key.Service == service {
+			// Remove filters for this contract's metrics
+			for metric := range contract.Metrics {
 				c.Filters.DeleteMetricFilter(metric, contract.States)
 			}
+			delete(c.Contracts, key)
+			delete(c.compiledExpressions, key)
 		}
 	}
 
-	// Delete service data
-	delete(c.Contracts, service)
-	delete(c.ContainerDatapoints, service)
-	return nil
-}
-
-func (c *ContractState) GenerateDefaultContract(formula string, states map[string]bool) error {
-	neededMetrics := filterMetricsFromFormula(formula)
-	c.DefaultContracts[formula] = newCalculcationContract(formula, "", states, neededMetrics)
+	// Clean up datapoints
+	for key := range c.Datapoints {
+		if key.Service == service {
+			delete(c.Datapoints, key)
+		}
+	}
 	return nil
 }
 
 func (c *ContractState) RemoveContract(service string) error {
-	// remove all contracts associated with a service
 	if service == "default" {
-		return fmt.Errorf("cannot disable default calculations")
+		return fmt.Errorf("cannot remove default contracts")
 	}
-	delete(c.Contracts, service)
-	delete(c.ContainerDatapoints, service)
+
+	c.Lock()
+	defer c.Unlock()
+
+	// Find and remove all contracts for the service
+	for key, contract := range c.Contracts {
+		if key.Service == service {
+			// Remove filters for this contract's metrics
+			for metric := range contract.Metrics {
+				c.Filters.DeleteMetricFilter(metric, contract.States)
+			}
+			delete(c.Contracts, key)
+			delete(c.compiledExpressions, key)
+		}
+	}
 	return nil
 }
 
@@ -130,83 +188,68 @@ func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
 		var serviceName string
 		containerMetric := false
 		rm := metrics.ResourceMetrics().At(i)
-
 		rmAttr := rm.Resource().Attributes()
 
-		// check if the metrics bundle is associated with a service
+		// Check if metrics bundle is associated with a service
 		sn, ok := rmAttr.Get("container_id")
 		_, okk := rmAttr.Get("namespace")
 		if ok && okk {
-			containerMetric = ok
+			containerMetric = true
 			serviceName = sn.Str()
-			if c.ContainerDatapoints[serviceName] == nil {
-				c.ContainerDatapoints[serviceName] = make(map[string]map[string]MetricDatapoint)
+
+			// Check if service is registered
+			serviceExists := false
+			for key := range c.Contracts {
+				if key.Service == serviceName {
+					serviceExists = true
+					break
+				}
 			}
-			if _, ok := c.Contracts[serviceName]; !ok {
-				// if service is not registered, do nothing
+			if !serviceExists {
 				continue
 			}
 		}
 
 		for j := 0; j < rm.ScopeMetrics().Len(); j++ {
 			smetric := rm.ScopeMetrics().At(j)
-
 			for k := 0; k < smetric.Metrics().Len(); k++ {
 				mmetric := smetric.Metrics().At(k)
-				// if we expect metrics specific to a service, check metric name has correct prefix
+
 				if containerMetric && !strings.HasPrefix(mmetric.Name(), "container.") {
 					continue
 				}
 
-				// guard clause, check that metric is set in filter and active
 				metricFilter, ok := c.Filters.MetricFilters[mmetric.Name()]
 				if !ok {
 					continue
 				}
 
-				if c.SystemDatapoints[mmetric.Name()] == nil {
-					c.SystemDatapoints[mmetric.Name()] = make(map[string]MetricDatapoint)
-				}
-
 				statesPresent := mmetric.Sum().DataPoints().Len() > 1
-				// verify we have states present in the filter
-				if statesPresent {
-					if metricFilter.StateFilter == nil {
-						continue
-					}
-				}
-				if c.ContainerDatapoints[serviceName][mmetric.Name()] == nil && containerMetric {
-					c.ContainerDatapoints[serviceName][mmetric.Name()] = make(map[string]MetricDatapoint)
+				if statesPresent && metricFilter.StateFilter == nil {
+					continue
 				}
 
 				for x := 0; x < mmetric.Sum().DataPoints().Len(); x++ {
 					ndp := mmetric.Sum().DataPoints().At(x)
-
 					mdp := CreateMetricDatapoint(mmetric, x)
 
-					if !containerMetric {
-						// system metric
-						if !statesPresent {
-							c.SystemDatapoints[mmetric.Name()]["default"] = mdp
-							continue
-						} else {
-							if v, ok := ndp.Attributes().Get("state"); ok && c.Filters.MetricFilters[mmetric.Name()].StateFilter[v.Str()] != 0 {
-								c.SystemDatapoints[mmetric.Name()][v.Str()] = mdp
-								continue
-							}
-						}
-					} else {
-						// container metric
-						if !statesPresent {
-							c.ContainerDatapoints[serviceName][mmetric.Name()]["default"] = mdp
-							continue
-						} else {
-							if v, ok := ndp.Attributes().Get("state"); ok && c.Filters.MetricFilters[mmetric.Name()].StateFilter[v.Str()] != 0 {
-								c.ContainerDatapoints[serviceName][mmetric.Name()][v.Str()] = mdp
+					state := "default"
+					if statesPresent {
+						if v, ok := ndp.Attributes().Get("state"); ok {
+							if metricFilter.StateFilter[v.Str()] != 0 {
+								state = v.Str()
+							} else {
 								continue
 							}
 						}
 					}
+
+					key := DatapointKey{
+						Service: serviceName, // empty for system metrics
+						Metric:  mmetric.Name(),
+						State:   state,
+					}
+					c.Datapoints[key] = mdp
 				}
 			}
 		}
@@ -224,22 +267,30 @@ func (c *ContractState) Evaluate() CalculationResults {
 	c.RLock()
 	defer c.RUnlock()
 
-	res := make(CalculationResults, len(c.Contracts))
+	// Skip default contracts in evaluation
+	serviceContracts := make(map[string][]ContractKey)
+	for key := range c.Contracts {
+		if key.Service != "default" {
+			serviceContracts[key.Service] = append(serviceContracts[key.Service], key)
+		}
+	}
+
+	res := make(CalculationResults, len(serviceContracts))
 	var wg sync.WaitGroup
 	resultChan := make(chan struct {
 		service string
 		results map[string]map[string]float64
-	}, len(c.Contracts))
+	}, len(serviceContracts))
 
-	for service, formulae := range c.Contracts {
+	for service, contractKeys := range serviceContracts {
 		wg.Add(1)
-		go func(service string, formulae map[string]CalculationContract) {
+		go func(service string, contractKeys []ContractKey) {
 			defer wg.Done()
-			serviceResults := make(map[string]map[string]float64, len(formulae))
+			serviceResults := make(map[string]map[string]float64)
 
-			compiledExprs := c.compiledExpressions[service]
-			for formula, contract := range formulae {
-				expr := compiledExprs[formula]
+			for _, key := range contractKeys {
+				contract := c.Contracts[key]
+				expr := c.compiledExpressions[key]
 				if expr == nil {
 					continue
 				}
@@ -252,14 +303,14 @@ func (c *ContractState) Evaluate() CalculationResults {
 						stateResults[state] = result.(float64)
 					}
 				}
-				serviceResults[formula] = stateResults
+				serviceResults[key.Formula] = stateResults
 			}
 
 			resultChan <- struct {
 				service string
 				results map[string]map[string]float64
 			}{service, serviceResults}
-		}(service, formulae)
+		}(service, contractKeys)
 	}
 
 	go func() {
@@ -274,20 +325,24 @@ func (c *ContractState) Evaluate() CalculationResults {
 	return res
 }
 
-func (c *ContractState) GetParameters(cc CalculationContract) (res CalculationParameters) {
-	res = make(map[string]map[string]interface{})
+func (c *ContractState) GetParameters(cc CalculationContract) CalculationParameters {
+	res := make(map[string]map[string]interface{})
+
 	for state := range cc.States {
 		res[state] = make(map[string]interface{})
 		for metric := range cc.Metrics {
-			if strings.HasPrefix(metric, "container.") {
-				// fetch from containerMetrics
-				res[state][metric] = c.ContainerDatapoints[cc.Service][metric][state].Value.FloatValue
-			} else {
-				res[state][metric] = c.SystemDatapoints[metric][state].Value.FloatValue
+			key := DatapointKey{
+				Service: cc.Service,
+				Metric:  metric,
+				State:   state,
+			}
+
+			if dp, exists := c.Datapoints[key]; exists {
+				res[state][metric] = dp.Value.FloatValue
 			}
 		}
 	}
-	return
+	return res
 }
 
 // extract all necessary metrics from formula as a map to filter in the future
@@ -310,20 +365,6 @@ type CalculationContract struct {
 	Service string
 	States  map[string]bool // can be empty, if no state has to be considered
 	Metrics map[string]bool // derived from formula for later metric filtering
-}
-
-func newCalculcationContract(
-	formula string,
-	service string,
-	states map[string]bool,
-	metricFilter map[string]bool,
-) CalculationContract {
-	return CalculationContract{
-		Formula: formula,
-		Service: service,
-		States:  states,
-		Metrics: metricFilter,
-	}
 }
 
 type MetricDatapoint struct {

@@ -115,7 +115,7 @@ func newMemoryMetricProcessor(
 }
 
 func (c *MemoryMetricProcessor) RegisterService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo) error {
-	return c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), nil)
+	return c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), map[string]internal.CalculationContract{})
 }
 
 func (c *MemoryMetricProcessor) DeleteService(serviceName string, instanceNumber int32) error {
