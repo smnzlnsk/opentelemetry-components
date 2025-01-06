@@ -3,9 +3,10 @@ package mqttreceiver // import github.com/smnzlnsk/opentelemetry-components/rece
 import (
 	"context"
 	"fmt"
-	"go.opentelemetry.io/collector/receiver"
 	"sync"
 	"time"
+
+	"go.opentelemetry.io/collector/receiver"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"go.opentelemetry.io/collector/component"
@@ -56,8 +57,7 @@ func newMQTTReceiver(cfg *Config, logger *zap.Logger, consumer consumer.Metrics)
 }
 
 func (mr *mqttReceiver) Start(ctx context.Context, host component.Host) error {
-	ctx = context.Background()
-	ctx, mr.cancel = context.WithCancel(ctx)
+	_, mr.cancel = context.WithCancel(ctx)
 	marshaler, err := newMarshaler(mr.config.Encoding)
 	if err != nil {
 		return err
@@ -66,12 +66,8 @@ func (mr *mqttReceiver) Start(ctx context.Context, host component.Host) error {
 	mr.host = host
 
 	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			}
-		}
+		<-ctx.Done()
+		mr.Shutdown(ctx)
 	}()
 
 	return nil
@@ -87,17 +83,9 @@ func (mr *mqttReceiver) Shutdown(ctx context.Context) error {
 
 func (mr *mqttReceiver) ConsumeMetrics(ctx context.Context, metrics pmetric.Metrics) error {
 	if mr.consumer == nil {
-		mr.logger.Error("no next consumer available, dropping metric data")
-		return nil
+		return fmt.Errorf("no consumer available to receive metrics")
 	}
-
-	err := mr.consumer.ConsumeMetrics(ctx, metrics)
-	if err != nil {
-		mr.logger.Error("failed to forward metric data", zap.Error(err))
-		return err
-	}
-	mr.logger.Debug("successfully consumed metric data")
-	return nil
+	return mr.consumer.ConsumeMetrics(ctx, metrics)
 }
 
 func (mr *mqttReceiver) handleMetrics(c mqtt.Client, m mqtt.Message) {
