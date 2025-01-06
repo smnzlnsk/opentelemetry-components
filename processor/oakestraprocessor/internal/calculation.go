@@ -20,6 +20,7 @@ type ContractState struct {
 	SystemDatapoints map[string]map[string]MetricDatapoint
 	// read: [service][metric][state]MetricDatapoint
 	ContainerDatapoints map[string]map[string]map[string]MetricDatapoint
+	compiledExpressions map[string]map[string]*govaluate.EvaluableExpression // map[service][formula]*Expression
 }
 
 func NewContractState() *ContractState {
@@ -29,6 +30,7 @@ func NewContractState() *ContractState {
 		Filters:             newFilter(),
 		SystemDatapoints:    make(map[string]map[string]MetricDatapoint),
 		ContainerDatapoints: make(map[string]map[string]map[string]MetricDatapoint),
+		compiledExpressions: make(map[string]map[string]*govaluate.EvaluableExpression),
 	}
 }
 
@@ -40,19 +42,35 @@ func (c *ContractState) RegisterService(service string, contracts map[string]Cal
 		return fmt.Errorf("service %s already registered", service)
 	}
 
+	// Pre-compile expressions for the service
+	compiledExprs := make(map[string]*govaluate.EvaluableExpression)
 	serviceContracts := make(map[string]CalculationContract, len(contracts)+len(c.DefaultContracts))
 	c.ContainerDatapoints[service] = make(map[string]map[string]MetricDatapoint)
 
+	// First compile default contracts
 	for formula, contract := range c.DefaultContracts {
+		expr, err := govaluate.NewEvaluableExpression(formula)
+		if err != nil {
+			return fmt.Errorf("invalid default formula %s: %w", formula, err)
+		}
+		compiledExprs[formula] = expr
+
 		contractCopy := contract
 		contractCopy.Service = service
 		serviceContracts[formula] = contractCopy
 	}
 
+	// Then compile service-specific contracts
 	for formula, contract := range contracts {
+		expr, err := govaluate.NewEvaluableExpression(formula)
+		if err != nil {
+			return fmt.Errorf("invalid formula %s: %w", formula, err)
+		}
+		compiledExprs[formula] = expr
 		serviceContracts[formula] = contract
 	}
 
+	c.compiledExpressions[service] = compiledExprs
 	c.Contracts[service] = serviceContracts
 
 	for formula, contract := range c.Contracts[service] {
@@ -219,9 +237,10 @@ func (c *ContractState) Evaluate() CalculationResults {
 			defer wg.Done()
 			serviceResults := make(map[string]map[string]float64, len(formulae))
 
+			compiledExprs := c.compiledExpressions[service]
 			for formula, contract := range formulae {
-				expression, err := govaluate.NewEvaluableExpression(formula)
-				if err != nil {
+				expr := compiledExprs[formula]
+				if expr == nil {
 					continue
 				}
 
@@ -229,7 +248,7 @@ func (c *ContractState) Evaluate() CalculationResults {
 				stateResults := make(map[string]float64, len(params))
 
 				for state, cp := range params {
-					if result, err := expression.Evaluate(cp); err == nil {
+					if result, err := expr.Evaluate(cp); err == nil {
 						stateResults[state] = result.(float64)
 					}
 				}
