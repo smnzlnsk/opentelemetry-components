@@ -131,11 +131,7 @@ func (p *MultiProcessor) ConsumeMetrics(ctx context.Context, metrics pmetric.Met
 		}
 	}
 
-	err := p.next.ConsumeMetrics(ctx, metrics)
-	if err != nil {
-		p.logger.Error("failed to consume metrics", zap.Error(err))
-	}
-	return nil
+	return p.next.ConsumeMetrics(ctx, metrics)
 }
 
 func (p *MultiProcessor) registerService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo) error {
