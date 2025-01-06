@@ -1,0 +1,10 @@
+type: heuristicengine
+
+status:
+  class: processor
+  stability:
+    development: [metrics]
+  distributions: []
+  warnings: []
+  codeowners:
+    active: [smnzlnsk]
