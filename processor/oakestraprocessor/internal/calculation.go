@@ -3,10 +3,12 @@ package internal
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/Knetic/govaluate"
+	pb "github.com/smnzlnsk/monitoring-proto-lib/gen/go/monitoring_proto_lib/monitoring/v1"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 )
@@ -63,7 +65,7 @@ func (c *ContractState) GenerateDefaultContract(formula string, states map[strin
 	return nil
 }
 
-func (c *ContractState) RegisterService(service string, contracts map[string]CalculationContract) error {
+func (c *ContractState) RegisterService(service string, contracts map[string]CalculationContract, normalizationValue string) error {
 	c.Lock()
 	defer c.Unlock()
 
@@ -73,6 +75,12 @@ func (c *ContractState) RegisterService(service string, contracts map[string]Cal
 
 	if contracts == nil {
 		return fmt.Errorf("contracts map cannot be nil")
+	}
+
+	// verify normalization value is a parsable number
+	normValue, err := strconv.ParseFloat(normalizationValue, 64)
+	if err != nil {
+		return fmt.Errorf("invalid normalization value %s: %w", normalizationValue, err)
 	}
 
 	// Check if service already exists
@@ -92,8 +100,9 @@ func (c *ContractState) RegisterService(service string, contracts map[string]Cal
 
 			serviceContract := contract
 			serviceContract.Service = service
-
-			expr, err := govaluate.NewEvaluableExpression(key.Formula)
+			normalisedFormula := fmt.Sprintf("(%s) / %f", key.Formula, normValue)
+			fmt.Printf("normalisedFormula: %s\n", normalisedFormula)
+			expr, err := govaluate.NewEvaluableExpression(normalisedFormula)
 			if err != nil {
 				return fmt.Errorf("invalid formula %s: %w", key.Formula, err)
 			}
@@ -114,7 +123,9 @@ func (c *ContractState) RegisterService(service string, contracts map[string]Cal
 	for formula, contract := range contracts {
 		key := ContractKey{Service: service, Formula: formula}
 
-		expr, err := govaluate.NewEvaluableExpression(formula)
+		normalisedFormula := fmt.Sprintf("(%s) / %f", formula, normValue)
+		fmt.Printf("normalisedFormula: %s\n", normalisedFormula)
+		expr, err := govaluate.NewEvaluableExpression(normalisedFormula)
 		if err != nil {
 			return fmt.Errorf("invalid formula %s: %w", formula, err)
 		}
@@ -184,20 +195,32 @@ func (c *ContractState) RemoveContract(service string) error {
 }
 
 func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
+	c.Lock()
+	defer c.Unlock()
+
 	for i := 0; i < metrics.ResourceMetrics().Len(); i++ {
-		var serviceName string
-		containerMetric := false
 		rm := metrics.ResourceMetrics().At(i)
 		rmAttr := rm.Resource().Attributes()
 
-		// Check if metrics bundle is associated with a service
-		sn, ok := rmAttr.Get("container_id")
-		_, okk := rmAttr.Get("namespace")
-		if ok && okk {
-			containerMetric = true
-			serviceName = sn.Str()
+		// Extract service name from attributes
+		var serviceName string
+		containerMetric := false
 
-			// Check if service is registered
+		// Check for service name in different attribute keys
+		_, ok := rmAttr.Get("service.name")
+		cid, ok2 := rmAttr.Get("container_id")
+		if ok && ok2 {
+			serviceName = cid.Str()
+			containerMetric = true
+		}
+
+		// Skip if no service name found and it's not a system metric
+		if serviceName == "" && containerMetric {
+			continue
+		}
+
+		// Check if service is registered (only for non-system metrics)
+		if serviceName != "" {
 			serviceExists := false
 			for key := range c.Contracts {
 				if key.Service == serviceName {
@@ -215,6 +238,7 @@ func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
 			for k := 0; k < smetric.Metrics().Len(); k++ {
 				mmetric := smetric.Metrics().At(k)
 
+				// Skip non-container metrics for container services
 				if containerMetric && !strings.HasPrefix(mmetric.Name(), "container.") {
 					continue
 				}
@@ -224,6 +248,7 @@ func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
 					continue
 				}
 
+				// Check if metric has state information
 				statesPresent := mmetric.Sum().DataPoints().Len() > 1
 				if statesPresent && metricFilter.StateFilter == nil {
 					continue
@@ -245,7 +270,7 @@ func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
 					}
 
 					key := DatapointKey{
-						Service: serviceName, // empty for system metrics
+						Service: serviceName,
 						Metric:  mmetric.Name(),
 						State:   state,
 					}
@@ -254,14 +279,27 @@ func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
 			}
 		}
 	}
+
 	return nil
 }
 
 // CalculationParameters map[state][metric]metricValue
 type CalculationParameters map[string]map[string]interface{}
 
-// CalculationResults map[service][formula][state]result
-type CalculationResults map[string]map[string]map[string]float64
+// Define a new key structure for flattened results
+type CalculationResultKey struct {
+	Service string
+	Formula string
+	State   string
+}
+
+// Change CalculationResults to use the flattened structure
+type CalculationResults map[CalculationResultKey]float64
+
+type workItem struct {
+	service     string
+	contractKey ContractKey
+}
 
 func (c *ContractState) Evaluate() CalculationResults {
 	c.RLock()
@@ -275,53 +313,59 @@ func (c *ContractState) Evaluate() CalculationResults {
 		}
 	}
 
-	res := make(CalculationResults, len(serviceContracts))
+	res := make(CalculationResults)
+	var mu sync.Mutex
 	var wg sync.WaitGroup
-	resultChan := make(chan struct {
-		service string
-		results map[string]map[string]float64
-	}, len(serviceContracts))
 
-	for service, contractKeys := range serviceContracts {
+	workChan := make(chan workItem)
+	numWorkers := 4
+
+	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
-		go func(service string, contractKeys []ContractKey) {
+		go func() {
 			defer wg.Done()
-			serviceResults := make(map[string]map[string]float64)
-
-			for _, key := range contractKeys {
-				contract := c.Contracts[key]
-				expr := c.compiledExpressions[key]
+			for work := range workChan {
+				contract := c.Contracts[work.contractKey]
+				expr := c.compiledExpressions[work.contractKey]
 				if expr == nil {
 					continue
 				}
 
 				params := c.GetParameters(contract)
-				stateResults := make(map[string]float64, len(params))
-
 				for state, cp := range params {
-					if result, err := expr.Evaluate(cp); err == nil {
-						stateResults[state] = result.(float64)
+					result, err := expr.Evaluate(cp)
+					if err != nil {
+						fmt.Printf("error evaluating expression %v\n", err)
+						continue
 					}
-				}
-				serviceResults[key.Formula] = stateResults
-			}
 
-			resultChan <- struct {
-				service string
-				results map[string]map[string]float64
-			}{service, serviceResults}
-		}(service, contractKeys)
+					resultKey := CalculationResultKey{
+						Service: work.service,
+						Formula: work.contractKey.Formula,
+						State:   state,
+					}
+
+					mu.Lock()
+					res[resultKey] = result.(float64)
+					mu.Unlock()
+				}
+			}
+		}()
 	}
 
 	go func() {
-		wg.Wait()
-		close(resultChan)
+		for service, contractKeys := range serviceContracts {
+			for _, key := range contractKeys {
+				workChan <- workItem{
+					service:     service,
+					contractKey: key,
+				}
+			}
+		}
+		close(workChan)
 	}()
 
-	for result := range resultChan {
-		res[result.service] = result.results
-	}
-
+	wg.Wait()
 	return res
 }
 
@@ -331,12 +375,17 @@ func (c *ContractState) GetParameters(cc CalculationContract) CalculationParamet
 	for state := range cc.States {
 		res[state] = make(map[string]interface{})
 		for metric := range cc.Metrics {
+			// Reset service name for system metrics
+			serviceForLookup := cc.Service
+			if strings.HasPrefix(metric, "system.") {
+				serviceForLookup = ""
+			}
+
 			key := DatapointKey{
-				Service: cc.Service,
+				Service: serviceForLookup,
 				Metric:  metric,
 				State:   state,
 			}
-
 			if dp, exists := c.Datapoints[key]; exists {
 				res[state][metric] = dp.Value.FloatValue
 			}
@@ -365,6 +414,24 @@ type CalculationContract struct {
 	Service string
 	States  map[string]bool // can be empty, if no state has to be considered
 	Metrics map[string]bool // derived from formula for later metric filtering
+}
+
+func NewCalculationContractsFromProto(service string, reqs []*pb.CalculationRequest) map[string]CalculationContract {
+	res := make(map[string]CalculationContract, len(reqs))
+	for _, req := range reqs {
+		states := make(map[string]bool, len(req.States))
+		for _, state := range req.States {
+			states[state] = true
+		}
+
+		res[req.Formula] = CalculationContract{
+			Formula: req.Formula,
+			Service: service,
+			States:  states,
+			Metrics: filterMetricsFromFormula(req.Formula),
+		}
+	}
+	return res
 }
 
 type MetricDatapoint struct {
@@ -408,4 +475,60 @@ func CreateMetricDatapoint(metric pmetric.Metric, idx int) MetricDatapoint {
 		},
 	}
 	return md
+}
+
+// Helper methods for CalculationResults
+func (cr CalculationResults) GetServicesMap() map[string]map[string]map[string]float64 {
+	result := make(map[string]map[string]map[string]float64)
+
+	for key, value := range cr {
+		// Initialize nested maps if they don't exist
+		if _, ok := result[key.Service]; !ok {
+			result[key.Service] = make(map[string]map[string]float64)
+		}
+		if _, ok := result[key.Service][key.Formula]; !ok {
+			result[key.Service][key.Formula] = make(map[string]float64)
+		}
+
+		result[key.Service][key.Formula][key.State] = value
+	}
+
+	return result
+}
+
+// GetServiceNames returns a slice of unique service names
+func (cr CalculationResults) GetServiceNames() []string {
+	services := make(map[string]struct{})
+	for key := range cr {
+		services[key.Service] = struct{}{}
+	}
+
+	result := make([]string, 0, len(services))
+	for service := range services {
+		result = append(result, service)
+	}
+	return result
+}
+
+// GetResultsForService returns all results for a given service
+func (cr CalculationResults) GetResultsForService(service string) map[string]map[string]float64 {
+	result := make(map[string]map[string]float64)
+
+	for key, value := range cr {
+		if key.Service == service {
+			if _, ok := result[key.Formula]; !ok {
+				result[key.Formula] = make(map[string]float64)
+			}
+			result[key.Formula][key.State] = value
+		}
+	}
+
+	return result
+}
+
+// Add a method to normalize calculation results
+func (cr CalculationResults) Normalize(serviceNormalizationLimit float64) {
+	for key, value := range cr {
+		cr[key] = value / serviceNormalizationLimit // Normalize each result
+	}
 }

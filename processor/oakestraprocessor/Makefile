@@ -9,14 +9,10 @@ PKG_PATH=./internal
 BENCH_TIME=1s
 BENCH_COUNT=5
 
-.PHONY: all test bench bench-filter bench-calculation test-verbose clean proto
+.PHONY: all test bench bench-filter bench-calculation test-verbose clean
 
 # Default target
 all: test
-
-# Generate proto files
-proto:
-	protoc --go_out=. --go-grpc_out=. --go-grpc_opt=paths=source_relative --go_opt=paths=source_relative proto/*.proto
 
 # Run all tests
 test:

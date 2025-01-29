@@ -1,6 +1,8 @@
 package internal
 
-import "sync"
+import (
+	"sync"
+)
 
 type MetricFilter interface {
 	AddMetricFilter(string) error

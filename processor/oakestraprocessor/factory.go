@@ -3,8 +3,10 @@ package oakestraprocessor // import github.com/smnzlnsk/opentelemetry-components
 import (
 	"context"
 	"fmt"
+
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/metadata"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/applicationprocessor"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/cpuprocessor"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/memoryprocessor"
 	"go.opentelemetry.io/collector/component"
@@ -14,8 +16,9 @@ import (
 
 var (
 	processorFactories = map[string]internal.ProcessorFactory{
-		cpuprocessor.TypeStr:    &cpuprocessor.Factory{},
-		memoryprocessor.TypeStr: &memoryprocessor.Factory{},
+		cpuprocessor.TypeStr:         &cpuprocessor.Factory{},
+		memoryprocessor.TypeStr:      &memoryprocessor.Factory{},
+		applicationprocessor.TypeStr: &applicationprocessor.Factory{},
 	}
 )
 

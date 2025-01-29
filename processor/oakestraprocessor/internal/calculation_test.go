@@ -37,7 +37,7 @@ func TestContractState(t *testing.T) {
 				},
 			}
 
-			err := cs.RegisterService(service, contracts)
+			err := cs.RegisterService(service, contracts, "100")
 			require.NoError(t, err)
 
 			// Verify contract registration
@@ -69,11 +69,11 @@ func TestContractState(t *testing.T) {
 			}
 
 			// First registration should succeed
-			err := cs.RegisterService(service, contracts)
+			err := cs.RegisterService(service, contracts, "100")
 			require.NoError(t, err)
 
 			// Second registration should fail
-			err = cs.RegisterService(service, contracts)
+			err = cs.RegisterService(service, contracts, "100")
 			require.Error(t, err, "Expected error on duplicate registration")
 		})
 	})
@@ -102,7 +102,7 @@ func TestContractState(t *testing.T) {
 			},
 		}
 
-		err = cs.RegisterService(service, contracts)
+		err = cs.RegisterService(service, contracts, "100")
 		require.NoError(t, err)
 
 		// Count contracts for the service
@@ -151,7 +151,7 @@ func TestContractState(t *testing.T) {
 			}
 
 			// Setup and verify initial state
-			err := cs.RegisterService(service, contracts)
+			err := cs.RegisterService(service, contracts, "100")
 			require.NoError(t, err)
 
 			// Verify initial metric filters
@@ -209,7 +209,7 @@ func BenchmarkRegisterService(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				cs := NewContractState()
 				start := time.Now()
-				_ = cs.RegisterService(bm.service, contracts)
+				_ = cs.RegisterService(bm.service, contracts, "100")
 				b.ReportMetric(float64(time.Since(start).Nanoseconds()), "ns/op")
 			}
 		})
@@ -254,7 +254,7 @@ func TestRegisterServiceWithDefaults(t *testing.T) {
 	}
 
 	// Register service
-	err = cs.RegisterService(service, serviceContracts)
+	err = cs.RegisterService(service, serviceContracts, "100")
 	require.NoError(t, err)
 
 	// Count contracts for the service
@@ -324,7 +324,7 @@ func TestDeleteService(t *testing.T) {
 			}
 
 			// Register service
-			err := cs.RegisterService(tt.initialService, contracts)
+			err := cs.RegisterService(tt.initialService, contracts, "100")
 			require.NoError(t, err)
 
 			// Verify initial setup
@@ -404,7 +404,7 @@ func TestDefaultContractHandling(t *testing.T) {
 		},
 	}
 
-	err = cs.RegisterService(service, contracts)
+	err = cs.RegisterService(service, contracts, "100")
 	require.NoError(t, err)
 
 	// Verify service has both its own contract and the default contract
@@ -450,7 +450,7 @@ func TestServiceRegistration(t *testing.T) {
 			},
 		}
 
-		err := cs.RegisterService(service, contracts)
+		err := cs.RegisterService(service, contracts, "100")
 		require.NoError(t, err)
 
 		// Verify contract registration
@@ -487,7 +487,7 @@ func TestServiceRegistration(t *testing.T) {
 			},
 		}
 
-		err := cs.RegisterService(service, contracts)
+		err := cs.RegisterService(service, contracts, "100")
 		require.NoError(t, err)
 
 		// Verify metric filters
@@ -546,17 +546,17 @@ func TestContractState_Comprehensive(t *testing.T) {
 			contracts := map[string]CalculationContract{
 				"[metric1]": {Formula: "[metric1]"},
 			}
-			err := cs.RegisterService("", contracts)
+			err := cs.RegisterService("", contracts, "100")
 			require.Error(t, err, "Should not allow empty service name")
 		})
 
 		t.Run("register with nil contracts", func(t *testing.T) {
-			err := cs.RegisterService("test", nil)
+			err := cs.RegisterService("test", nil, "100")
 			require.Error(t, err, "Should not allow nil contracts")
 		})
 
 		t.Run("register with empty contracts", func(t *testing.T) {
-			err := cs.RegisterService("test", map[string]CalculationContract{})
+			err := cs.RegisterService("test", map[string]CalculationContract{}, "100")
 			require.NoError(t, err, "Should allow empty contracts map")
 		})
 
@@ -567,7 +567,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 					Service: "test",
 				},
 			}
-			err := cs.RegisterService("test", contracts)
+			err := cs.RegisterService("test", contracts, "100")
 			require.Error(t, err, "Should not allow invalid formula")
 		})
 	})
@@ -584,7 +584,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 					States:  map[string]bool{"running": true, "stopped": true},
 					Metrics: map[string]bool{"metric1": true},
 				},
-			})
+			}, "100")
 			require.NoError(t, err)
 
 			// Register second contract with overlapping states
@@ -595,7 +595,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 					States:  map[string]bool{"running": true, "paused": true},
 					Metrics: map[string]bool{"metric1": true},
 				},
-			})
+			}, "100")
 			require.NoError(t, err)
 
 			filter, exists := cs.Filters.MetricFilters["metric1"]
@@ -617,7 +617,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 					States:  map[string]bool{"running": true},
 					Metrics: map[string]bool{"metric1": true, "metric2": true},
 				},
-			})
+			}, "100")
 			require.NoError(t, err)
 
 			// Delete service
@@ -645,7 +645,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 					States:  map[string]bool{"running": true},
 					Metrics: map[string]bool{"metric1": true},
 				},
-			})
+			}, "100")
 			require.NoError(t, err)
 
 			// Add datapoints
@@ -689,7 +689,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 						Metrics: map[string]bool{"metric2": true},
 					},
 				}
-				err := cs.RegisterService(svc, contracts)
+				err := cs.RegisterService(svc, contracts, "100")
 				require.NoError(t, err)
 			}(service)
 		}

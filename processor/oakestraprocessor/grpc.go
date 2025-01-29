@@ -6,17 +6,43 @@ import (
 	"net"
 	"sync"
 
-	pb "github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/proto"
+	pb "github.com/smnzlnsk/monitoring-proto-lib/gen/go/monitoring_proto_lib/monitoring/v1"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
+// Server represents a generic server interface
+type Server interface {
+	Start() error
+	Stop()
+}
+
+// GRPCServer implements Server
 type GRPCServer struct {
 	server *grpc.Server
 	logger *zap.Logger
 	proc   *MultiProcessor
 	port   int
 	mu     sync.Mutex
+}
+
+// Mock server for testing
+type MockServer struct {
+	StartFunc func() error
+	StopFunc  func()
+}
+
+func (m *MockServer) Start() error {
+	if m.StartFunc != nil {
+		return m.StartFunc()
+	}
+	return nil
+}
+
+func (m *MockServer) Stop() {
+	if m.StopFunc != nil {
+		m.StopFunc()
+	}
 }
 
 type monitoringServer struct {
@@ -46,11 +72,13 @@ func (g *GRPCServer) Start() error {
 		return fmt.Errorf("failed to listen: %v", err)
 	}
 
-	g.server = grpc.NewServer()
-	pb.RegisterMonitoringServiceServer(g.server, &monitoringServer{
+	server := grpc.NewServer()
+	pb.RegisterMonitoringServiceServer(server, &monitoringServer{
 		logger: g.logger,
 		proc:   g.proc,
 	})
+
+	g.server = server
 
 	go func() {
 		if err := g.server.Serve(lis); err != nil {
@@ -73,7 +101,7 @@ func (g *GRPCServer) Stop() {
 	}
 }
 
-func (s *monitoringServer) NotifyDeployment(ctx context.Context, req *pb.MonitoringDeploymentRequest) (*pb.MonitoringResponse, error) {
+func (s *monitoringServer) NotifyDeployment(ctx context.Context, req *pb.NotifyDeploymentRequest) (*pb.NotifyDeploymentResponse, error) {
 	s.logger.Info("Received deployment",
 		zap.String("job_name", req.JobName),
 		zap.String("job_hash", req.JobHash),
@@ -84,22 +112,23 @@ func (s *monitoringServer) NotifyDeployment(ctx context.Context, req *pb.Monitor
 		zap.String("network_bandwidth_in", req.Resource.Network.BandwidthIn),
 		zap.String("network_bandwidth_out", req.Resource.Network.BandwidthOut),
 		zap.String("disk", req.Resource.Disk),
+		zap.Any("calculation_requests", req.CalculationRequests),
 	)
 
-	s.proc.registerService(req.JobName, req.InstanceNumber, req.Resource)
+	s.proc.registerService(req.JobName, req.InstanceNumber, req.Resource, req.CalculationRequests)
 
-	return &pb.MonitoringResponse{
+	return &pb.NotifyDeploymentResponse{
 		Acknowledged: true,
 		Message:      "Successfully processed deployment",
 	}, nil
 }
 
-func (s *monitoringServer) NotifyDeletion(ctx context.Context, req *pb.MonitoringDeletionRequest) (*pb.MonitoringResponse, error) {
+func (s *monitoringServer) NotifyDeletion(ctx context.Context, req *pb.NotifyDeletionRequest) (*pb.NotifyDeletionResponse, error) {
 	s.logger.Info("Received deletion", zap.String("job_name", req.JobName), zap.Int32("instance_number", req.InstanceNumber))
 
 	s.proc.deleteService(req.JobName, req.InstanceNumber)
 
-	return &pb.MonitoringResponse{
+	return &pb.NotifyDeletionResponse{
 		Acknowledged: true,
 		Message:      "Successfully processed deletion",
 	}, nil

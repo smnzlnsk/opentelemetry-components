@@ -31,19 +31,7 @@ func TestComponentConfigStruct(t *testing.T) {
 func TestComponentLifecycle(t *testing.T) {
 	factory := NewFactory()
 
-	tests := []struct {
-		name     string
-		createFn func(ctx context.Context, set processor.Settings, cfg component.Config) (component.Component, error)
-	}{
-
-		{
-			name: "metrics",
-			createFn: func(ctx context.Context, set processor.Settings, cfg component.Config) (component.Component, error) {
-				return factory.CreateMetricsProcessor(ctx, set, cfg, consumertest.NewNop())
-			},
-		},
-	}
-
+	// Mock configuration with a test port
 	cm, err := confmaptest.LoadConf("metadata.yaml")
 	require.NoError(t, err)
 	cfg := factory.CreateDefaultConfig()
@@ -51,21 +39,48 @@ func TestComponentLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, sub.Unmarshal(&cfg))
 
-	for _, test := range tests {
-		t.Run(test.name+"-shutdown", func(t *testing.T) {
-			c, err := test.createFn(context.Background(), processortest.NewNopSettings(), cfg)
+	tests := []struct {
+		name     string
+		createFn func(ctx context.Context, set processor.Settings, cfg component.Config) (component.Component, error)
+	}{
+		{
+			name: "metrics",
+			createFn: func(ctx context.Context, set processor.Settings, cfg component.Config) (component.Component, error) {
+				comp, err := factory.CreateMetricsProcessor(ctx, set, cfg, consumertest.NewNop())
+				if err != nil {
+					return nil, err
+				}
+
+				// Cast to our processor type
+				if mp, ok := comp.(*MultiProcessor); ok {
+					// Create and set mock server
+					mockServer := &MockServer{
+						StartFunc: func() error { return nil },
+						StopFunc:  func() {},
+					}
+					mp.SetServer(mockServer)
+				}
+				
+				return comp, nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name+"-shutdown", func(t *testing.T) {
+			c, err := tt.createFn(context.Background(), processortest.NewNopSettings(), cfg)
 			require.NoError(t, err)
 			err = c.Shutdown(context.Background())
 			require.NoError(t, err)
 		})
-		t.Run(test.name+"-lifecycle", func(t *testing.T) {
-			c, err := test.createFn(context.Background(), processortest.NewNopSettings(), cfg)
+		t.Run(tt.name+"-lifecycle", func(t *testing.T) {
+			c, err := tt.createFn(context.Background(), processortest.NewNopSettings(), cfg)
 			require.NoError(t, err)
 			host := componenttest.NewNopHost()
 			err = c.Start(context.Background(), host)
 			require.NoError(t, err)
 			require.NotPanics(t, func() {
-				switch test.name {
+				switch tt.name {
 				case "logs":
 					e, ok := c.(processor.Logs)
 					require.True(t, ok)
@@ -104,7 +119,7 @@ func generateLifecycleTestLogs() plog.Logs {
 	rl := logs.ResourceLogs().AppendEmpty()
 	rl.Resource().Attributes().PutStr("resource", "R1")
 	l := rl.ScopeLogs().AppendEmpty().LogRecords().AppendEmpty()
-	l.Body().SetStr("test logger message")
+	l.Body().SetStr("test log message")
 	l.SetTimestamp(pcommon.NewTimestampFromTime(time.Now()))
 	return logs
 }

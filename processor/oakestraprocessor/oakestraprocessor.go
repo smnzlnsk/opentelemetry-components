@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	pb "github.com/smnzlnsk/monitoring-proto-lib/gen/go/monitoring_proto_lib/monitoring/v1"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
-	pb "github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/proto"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -20,7 +20,7 @@ type MultiProcessor struct {
 	next       consumer.Metrics
 	logger     *zap.Logger
 	cancel     context.CancelFunc
-	grpcServer *GRPCServer
+	grpcServer Server
 }
 
 func newMultiProcessor(ctx context.Context, set processor.Settings, cfg *Config, next consumer.Metrics) *MultiProcessor {
@@ -134,9 +134,14 @@ func (p *MultiProcessor) ConsumeMetrics(ctx context.Context, metrics pmetric.Met
 	return p.next.ConsumeMetrics(ctx, metrics)
 }
 
-func (p *MultiProcessor) registerService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo) error {
+// Add a method to set the server (useful for testing)
+func (p *MultiProcessor) SetServer(s Server) {
+	p.grpcServer = s
+}
+
+func (p *MultiProcessor) registerService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo, requests []*pb.CalculationRequest) error {
 	for _, subp := range p.processors {
-		err := subp.RegisterService(serviceName, instanceNumber, resource)
+		err := subp.RegisterService(serviceName, instanceNumber, resource, requests)
 		if err != nil {
 			return err
 		}

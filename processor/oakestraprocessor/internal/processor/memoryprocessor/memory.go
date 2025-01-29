@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	pb "github.com/smnzlnsk/monitoring-proto-lib/gen/go/monitoring_proto_lib/monitoring/v1"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/memoryprocessor/internal/metadata"
-	pb "github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/proto"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -29,11 +29,11 @@ var _ internal.MetricProcessor = (*MemoryMetricProcessor)(nil)
 
 // Define memory metrics as constants
 const (
-	memoryFormulaExpression = "[container.memory.usage] / [system.memory.usage]"
+	memoryFormulaExpression = "([container.memory.usage] / [system.memory.usage]) * 1000000"
 )
 
-// Define required memory metrics
-var requiredMemoryMetrics = map[string]bool{
+// Define required memory metric states
+var requiredMemoryMetricStates = map[string]bool{
 	"slab_reclaimable":   true,
 	"slab_unreclaimable": true,
 	"used":               true,
@@ -59,20 +59,16 @@ func (c *MemoryMetricProcessor) processMetrics(metrics pmetric.Metrics) (pmetric
 
 	results := c.contracts.Evaluate()
 
-	for service, f := range results {
+	for key, value := range results {
 		rb := c.mb.NewResourceBuilder()
-		rb.SetServiceName(service)
-		for _, state := range f {
-			for s, v := range state {
-				// TODO: create a contract meta tag
-				// indicating what metric the contract result is supposed to be assigned to
-				c.mb.RecordServiceMemoryUtilisationDataPoint(
-					pcommon.NewTimestampFromTime(time.Now()),
-					v,
-					metadata.MapAttributeState[s],
-				)
-			}
-		}
+		rb.SetServiceName(key.Service)
+
+		c.mb.RecordServiceMemoryUtilisationDataPoint(
+			pcommon.NewTimestampFromTime(time.Now()),
+			value,
+			metadata.MapAttributeState[key.State],
+		)
+
 		// set resources
 		c.mb.EmitForResource(metadata.WithResource(rb.Emit()))
 	}
@@ -88,10 +84,10 @@ func (c *MemoryMetricProcessor) Shutdown(_ context.Context) error {
 }
 
 func (c *MemoryMetricProcessor) Start(ctx context.Context, _ component.Host) error {
-	ctx, c.cancel = context.WithCancel(ctx)
+	_, c.cancel = context.WithCancel(ctx)
 
 	// initialize default contracts
-	if err := c.contracts.GenerateDefaultContract(memoryFormulaExpression, requiredMemoryMetrics); err != nil {
+	if err := c.contracts.GenerateDefaultContract(memoryFormulaExpression, requiredMemoryMetricStates); err != nil {
 		return err
 	}
 
@@ -114,8 +110,8 @@ func newMemoryMetricProcessor(
 	}, nil
 }
 
-func (c *MemoryMetricProcessor) RegisterService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo) error {
-	return c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), map[string]internal.CalculationContract{})
+func (c *MemoryMetricProcessor) RegisterService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo, _ []*pb.CalculationRequest) error {
+	return c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), map[string]internal.CalculationContract{}, resource.Memory)
 }
 
 func (c *MemoryMetricProcessor) DeleteService(serviceName string, instanceNumber int32) error {

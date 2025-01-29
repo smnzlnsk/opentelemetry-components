@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	pb "github.com/smnzlnsk/monitoring-proto-lib/gen/go/monitoring_proto_lib/monitoring/v1"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/cpuprocessor/internal/metadata"
-	pb "github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/proto"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -47,18 +47,16 @@ func (c *CPUMetricProcessor) processMetrics(metrics pmetric.Metrics) (pmetric.Me
 
 	results := c.contracts.Evaluate()
 
-	for service, f := range results {
+	for key, value := range results {
 		rb := c.mb.NewResourceBuilder()
-		rb.SetServiceName(service)
-		for _, state := range f {
-			for s, v := range state {
-				c.mb.RecordServiceCPUUtilisationDataPoint(
-					pcommon.NewTimestampFromTime(time.Now()),
-					v,
-					metadata.MapAttributeState[s],
-				)
-			}
-		}
+		rb.SetServiceName(key.Service)
+
+		c.mb.RecordServiceCPUUtilisationDataPoint(
+			pcommon.NewTimestampFromTime(time.Now()),
+			value,
+			metadata.MapAttributeState[key.State],
+		)
+
 		// set resources
 		c.mb.EmitForResource(metadata.WithResource(rb.Emit()))
 	}
@@ -78,7 +76,7 @@ func (c *CPUMetricProcessor) Start(ctx context.Context, _ component.Host) error 
 
 	// initialize default contracts
 	if err := c.contracts.GenerateDefaultContract(
-		"[container.cpu.time] / [system.cpu.time]",
+		"([container.cpu.time] / [system.cpu.time]) * 1000000",
 		map[string]bool{
 			"user":   true,
 			"system": true},
@@ -106,8 +104,8 @@ func newCPUMetricProcessor(
 	}, nil
 }
 
-func (c *CPUMetricProcessor) RegisterService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo) error {
-	return c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), map[string]internal.CalculationContract{})
+func (c *CPUMetricProcessor) RegisterService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo, _ []*pb.CalculationRequest) error {
+	return c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), map[string]internal.CalculationContract{}, resource.Cpu)
 }
 
 func (c *CPUMetricProcessor) DeleteService(serviceName string, instanceNumber int32) error {
