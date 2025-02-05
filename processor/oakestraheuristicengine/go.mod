@@ -3,6 +3,7 @@ module github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristice
 go 1.23.0
 
 require (
+	github.com/Knetic/govaluate v3.0.0+incompatible
 	github.com/stretchr/testify v1.10.0
 	go.opentelemetry.io/collector/component v0.109.0
 	go.opentelemetry.io/collector/confmap v1.15.0
