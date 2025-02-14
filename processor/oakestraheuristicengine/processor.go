@@ -3,9 +3,13 @@ package oakestraheuristicengine
 import (
 	"context"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/heuristicentity/factory"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/heuristicentity/interfaces"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/heuristicentity"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/measure"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/metricstore"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/policy"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -21,23 +25,25 @@ type heuristicEngineProcessor struct {
 	// reponsible to store metrics
 	metricStore metricstore.MetricStore
 
+	measureRegistry interfaces.MeasureRegistry
+
 	// collection of active entities
-	entityFactory  factory.HeuristicEntityFactory
-	activeEntities map[factory.HeuristicType]interfaces.HeuristicEntity
+	entityFactory  interfaces.HeuristicEntityFactory
+	activeEntities map[types.HeuristicType]interfaces.HeuristicEntity
 	// reponsible to store available entities, needed for initialization
-	availableEntities []factory.HeuristicType
+	availableEntities []types.HeuristicType
 }
 
 func newProcessor(config *Config, set processor.Settings, next consumer.Metrics) (*heuristicEngineProcessor, error) {
 	// TODO: add more entities here
-	availableEntities := []factory.HeuristicType{
-		factory.RoutingEntity,
+	availableEntities := []types.HeuristicType{
+		constants.RoutingEntity,
 	}
 	// initialize entity factory
-	entityFactory := factory.NewHeuristicEntityFactory(set.Logger)
+	entityFactory := heuristicentity.NewHeuristicEntityFactory(set.Logger)
 
 	// initialize active entities
-	activeEntities := make(map[factory.HeuristicType]interfaces.HeuristicEntity)
+	activeEntities := make(map[types.HeuristicType]interfaces.HeuristicEntity)
 	for _, entityType := range availableEntities {
 		entity, err := entityFactory.CreateHeuristicEntity(entityType)
 		if err != nil {
@@ -51,6 +57,7 @@ func newProcessor(config *Config, set processor.Settings, next consumer.Metrics)
 		nextConsumer:      next,
 		logger:            set.Logger,
 		metricStore:       metricstore.NewMetricStore(set.Logger),
+		measureRegistry:   measure.NewMeasureRegistry(set.Logger),
 		entityFactory:     entityFactory,
 		activeEntities:    activeEntities,
 		availableEntities: availableEntities,
@@ -65,7 +72,7 @@ func (p *heuristicEngineProcessor) ConsumeMetrics(ctx context.Context, md pmetri
 }
 
 func (p *heuristicEngineProcessor) Capabilities() consumer.Capabilities {
-	return consumer.Capabilities{MutatesData: true}
+	return consumer.Capabilities{MutatesData: false}
 }
 
 func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) error {
@@ -74,6 +81,16 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 			return err
 		}
 	}
+
+	// initialize policies
+	policyBuilder := policy.NewPolicyBuilder()
+	measureFactory := policyBuilder.MeasureFactory()
+
+	// add policies
+	policyBuilder.WithName("routing-policy").
+		WithRoute(measureFactory.CreateMeasure(constants.MeasureTypeRoute)).
+		Build()
+
 	return nil
 }
 

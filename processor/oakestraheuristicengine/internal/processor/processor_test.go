@@ -1,9 +1,9 @@
-package internal
+package processor
 
 import (
 	"testing"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/heuristicentity/internal/wpt"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/wpt"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -13,7 +13,7 @@ func TestNewHeuristicProcessor(t *testing.T) {
 	tree2 := wpt.NewBuilder("x > 5", 2.0, 0.5).BuildTree("tree2")
 
 	// Initialize processor with mock trees
-	processor := NewHeuristicProcessor(tree1, tree2)
+	processor := NewHeuristicProcessor("test_processor", tree1, tree2)
 
 	// Assert processor was created
 	assert.NotNil(t, processor)
@@ -31,7 +31,7 @@ func TestHeuristicProcessorWorkflow(t *testing.T) {
 	// If true, returns 1.0, if false returns 2.0
 	testTree := wpt.NewBuilder("x > 5", 1.0, 2.0).BuildTree("test_tree")
 
-	processor := NewHeuristicProcessor(testTree)
+	processor := NewHeuristicProcessor("test_processor", testTree)
 
 	// Test cases
 	testCases := []struct {
