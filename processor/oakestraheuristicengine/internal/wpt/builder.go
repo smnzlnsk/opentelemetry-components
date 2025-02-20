@@ -1,38 +1,40 @@
 package wpt
 
-type Builder struct {
+import "github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
+
+type builder struct {
 	decision    string
 	trueWeight  float64 // weight to apply when expression is true
 	falseWeight float64 // weight to apply when expression is false
-	left        *Builder
-	right       *Builder
-	parent      *Builder
+	left        *builder
+	right       *builder
+	parent      *builder
 }
 
-func NewBuilder(decision string, trueWeight, falseWeight float64) *Builder {
-	return &Builder{
+func NewBuilder(decision string, trueWeight, falseWeight float64) interfaces.TreeBuilder {
+	return &builder{
 		decision:    decision,
 		trueWeight:  trueWeight,
 		falseWeight: falseWeight,
 	}
 }
 
-func (b *Builder) Left(decision string, trueWeight, falseWeight float64) *Builder {
+func (b *builder) Left(decision string, trueWeight, falseWeight float64) interfaces.TreeBuilder {
 	childBuilder := NewBuilder(decision, trueWeight, falseWeight)
-	childBuilder.parent = b
-	b.left = childBuilder
+	childBuilder.(*builder).parent = b
+	b.left = childBuilder.(*builder)
 	return childBuilder
 }
 
-func (b *Builder) Right(decision string, trueWeight, falseWeight float64) *Builder {
+func (b *builder) Right(decision string, trueWeight, falseWeight float64) interfaces.TreeBuilder {
 	childBuilder := NewBuilder(decision, trueWeight, falseWeight)
-	childBuilder.parent = b
-	b.right = childBuilder
+	childBuilder.(*builder).parent = b
+	b.right = childBuilder.(*builder)
 	return childBuilder
 }
 
-func (b *Builder) Build() Node {
-	var leftNode, rightNode Node
+func (b *builder) Build() interfaces.Node {
+	var leftNode, rightNode interfaces.Node
 	if b.left != nil {
 		leftNode = b.left.Build()
 	}
@@ -42,7 +44,7 @@ func (b *Builder) Build() Node {
 	return newDecisionNode(b.decision, b.trueWeight, b.falseWeight, leftNode, rightNode)
 }
 
-func (b *Builder) BuildTree(identifier string) DecisionTree {
+func (b *builder) BuildTree(identifier string) interfaces.DecisionTree {
 	root := b
 	for root.parent != nil {
 		root = root.parent

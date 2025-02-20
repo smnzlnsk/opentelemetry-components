@@ -2,7 +2,6 @@ package interfaces
 
 import (
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/processor"
 )
 
 type HeuristicEntityFactory interface {
@@ -10,9 +9,9 @@ type HeuristicEntityFactory interface {
 }
 
 type HeuristicEntity interface {
-	Processors() map[string]processor.HeuristicProcessor
-	AddProcessor(identifier string, processor processor.HeuristicProcessor)
-	EvaluatePolicy() error
+	Processors() map[string]HeuristicProcessor
+	AddProcessor(identifier string, processor HeuristicProcessor)
+	Evaluate(values map[string]interface{}) map[string]interface{}
 	Start() error
 	Shutdown() error
 }

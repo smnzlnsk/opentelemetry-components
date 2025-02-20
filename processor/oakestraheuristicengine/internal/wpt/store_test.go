@@ -2,6 +2,8 @@ package wpt
 
 import (
 	"testing"
+
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
 )
 
 func TestStore_Add(t *testing.T) {
@@ -50,7 +52,7 @@ func TestStore_Get(t *testing.T) {
 	tests := []struct {
 		name       string
 		identifier string
-		want       DecisionTree
+		want       interfaces.DecisionTree
 	}{
 		{
 			name:       "get existing decision tree",
@@ -75,15 +77,6 @@ func TestStore_Get(t *testing.T) {
 }
 
 // mockDecisionTree is a simple mock implementation of DecisionTree interface
-type mockDecisionTree struct{}
-
-// Ensure mockDecisionTree implements DecisionTree interface
-var _ DecisionTree = (*mockDecisionTree)(nil)
-
-func (m *mockDecisionTree) Identifier() string {
-	return "mock-tree"
-}
-
-func (m *mockDecisionTree) Traverse(factor float64, params map[string]interface{}) (float64, error) {
-	return 0, nil
+type mockDecisionTree struct {
+	interfaces.DecisionTree
 }

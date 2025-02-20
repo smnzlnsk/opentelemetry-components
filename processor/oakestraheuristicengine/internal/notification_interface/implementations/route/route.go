@@ -1,4 +1,4 @@
-package alert
+package route
 
 import (
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
@@ -6,26 +6,25 @@ import (
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
 )
 
-type AlertConfig struct {
+type RouteConfig struct {
 	Threshold float64 `mapstructure:"threshold"`
 	Message   string  `mapstructure:"message"`
 	Endpoint  string  `mapstructure:"endpoint"`
 }
 
-var _ interfaces.MeasureNotifier = (*alertNotifier)(nil)
-
-type alertNotifier struct {
-	cfg AlertConfig
+// routeNotifier implements the NotificationInterface interface
+type routeNotifier struct {
+	host     string
+	port     int
+	endpoint string
 }
 
-func NewAlertNotifier(cfg AlertConfig) (interfaces.MeasureNotifier, error) {
-	return &alertNotifier{cfg: cfg}, nil
-}
+var _ interfaces.NotificationInterface = (*routeNotifier)(nil)
 
-func (a *alertNotifier) Notify() error {
+func (r *routeNotifier) Notify() error {
 	return nil
 }
 
-func (a *alertNotifier) Type() types.MeasureType {
-	return constants.MeasureTypeAlert
+func (r *routeNotifier) Type() types.NotificationInterfaceCapability {
+	return constants.NotificationInterfaceCapability_Route
 }

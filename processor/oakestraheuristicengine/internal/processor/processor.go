@@ -1,21 +1,17 @@
 package processor
 
 import (
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/wpt"
 )
 
-type HeuristicProcessor interface {
-	GetStore() wpt.Store
-	Identifier() string
-	Execute(treeIdentifier string, params map[string]interface{}) (float64, error)
-}
-
+// heuristicProcessor implements interfaces.HeuristicProcessor
 type heuristicProcessor struct {
 	identifier        string
-	decisionTreeStore wpt.Store
+	decisionTreeStore interfaces.TreeStore
 }
 
-func NewHeuristicProcessor(identifier string, decisionTrees ...wpt.DecisionTree) HeuristicProcessor {
+func NewHeuristicProcessor(identifier string, decisionTrees ...interfaces.DecisionTree) interfaces.HeuristicProcessor {
 	decisionTreeStore := wpt.NewStore()
 	for _, decisionTree := range decisionTrees {
 		decisionTreeStore.Add(decisionTree.Identifier(), decisionTree)
@@ -26,7 +22,7 @@ func NewHeuristicProcessor(identifier string, decisionTrees ...wpt.DecisionTree)
 	}
 }
 
-func (h *heuristicProcessor) GetStore() wpt.Store {
+func (h *heuristicProcessor) GetStore() interfaces.TreeStore {
 	return h.decisionTreeStore
 }
 

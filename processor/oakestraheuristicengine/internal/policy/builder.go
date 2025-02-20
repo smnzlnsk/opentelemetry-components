@@ -1,40 +1,40 @@
 package policy
 
 import (
+	"fmt"
+
+	"github.com/Knetic/govaluate"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/measure/factory"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/notification_interface/factory"
 )
 
-type PolicyBuilder interface {
-	WithName(name string) PolicyBuilder
-	WithRoute(measure interfaces.MeasureNotifier) PolicyBuilder
-	WithAlert(measure interfaces.MeasureNotifier) PolicyBuilder
-	WithSchedule(measure interfaces.MeasureNotifier) PolicyBuilder
-	WithHeuristicEntity(entity interfaces.HeuristicEntity) PolicyBuilder
-	MeasureFactory() interfaces.MeasureFactory
-	Build() Policy
-}
-
+// policyBuilder implements interfaces.PolicyBuilder
 type policyBuilder struct {
-	name            string
-	measureFactory  interfaces.MeasureFactory
-	capabilities    []types.PolicyNotificationCapability
-	measures        map[types.PolicyNotificationCapability]interfaces.MeasureNotifier
-	heuristicEntity interfaces.HeuristicEntity
+	name                         string
+	heuristicentity              interfaces.HeuristicEntity
+	preEvaluationConditions      []*govaluate.EvaluableExpression
+	evaluationConditions         []*govaluate.EvaluableExpression
+	alertConditions              []*govaluate.EvaluableExpression
+	routeConditions              []*govaluate.EvaluableExpression
+	scheduleConditions           []*govaluate.EvaluableExpression
+	notificationInterfaceFactory interfaces.NotificationInterfaceFactory
+	capabilities                 []types.NotificationInterfaceCapability
+	notificationInterfaces       map[types.NotificationInterfaceCapability]interfaces.NotificationInterface
+	heuristicEntity              interfaces.HeuristicEntity
 }
 
-var _ PolicyBuilder = &policyBuilder{}
+var _ interfaces.PolicyBuilder = &policyBuilder{}
 
-func NewPolicyBuilder() PolicyBuilder {
+func NewPolicyBuilder() interfaces.PolicyBuilder {
 	return &policyBuilder{
-		measureFactory: factory.NewMeasureFactory(nil),
-		measures:       make(map[types.PolicyNotificationCapability]interfaces.MeasureNotifier),
+		notificationInterfaceFactory: factory.NewNotificationInterfaceFactory(nil),
+		notificationInterfaces:       make(map[types.NotificationInterfaceCapability]interfaces.NotificationInterface),
 	}
 }
 
-func (b *policyBuilder) WithName(name string) PolicyBuilder {
+func (b *policyBuilder) WithName(name string) interfaces.PolicyBuilder {
 	if b.name != "" {
 		return b
 	}
@@ -42,72 +42,160 @@ func (b *policyBuilder) WithName(name string) PolicyBuilder {
 	return b
 }
 
-func (b *policyBuilder) WithRoute(measure interfaces.MeasureNotifier) PolicyBuilder {
-	if b.measures[constants.PolicyNotificationCapability_Route] != nil {
-		return b
-	}
-	b.capabilities = append(b.capabilities, constants.PolicyNotificationCapability_Route)
-	b.measures[constants.PolicyNotificationCapability_Route] = measure
+func (b *policyBuilder) WithHeuristicEngine(engine interfaces.HeuristicEntity) interfaces.PolicyBuilder {
+	b.heuristicEntity = engine
 	return b
 }
 
-func (b *policyBuilder) WithAlert(measure interfaces.MeasureNotifier) PolicyBuilder {
-	if b.measures[constants.PolicyNotificationCapability_Alert] != nil {
+func (b *policyBuilder) WithPreEvaluationCondition(conditions string) interfaces.PolicyBuilder {
+	expression, err := govaluate.NewEvaluableExpression(conditions)
+	if err != nil {
 		return b
 	}
-	b.capabilities = append(b.capabilities, constants.PolicyNotificationCapability_Alert)
-	b.measures[constants.PolicyNotificationCapability_Alert] = measure
+	b.preEvaluationConditions = append(b.preEvaluationConditions, expression)
 	return b
 }
 
-func (b *policyBuilder) WithSchedule(measure interfaces.MeasureNotifier) PolicyBuilder {
-	if b.measures[constants.PolicyNotificationCapability_Schedule] != nil {
+func (b *policyBuilder) WithEvaluationCondition(condition string) interfaces.PolicyBuilder {
+	expression, err := govaluate.NewEvaluableExpression(condition)
+	if err != nil {
 		return b
 	}
-	b.capabilities = append(b.capabilities, constants.PolicyNotificationCapability_Schedule)
-	b.measures[constants.PolicyNotificationCapability_Schedule] = measure
+	b.evaluationConditions = append(b.evaluationConditions, expression)
 	return b
 }
 
-func (b *policyBuilder) WithHeuristicEntity(entity interfaces.HeuristicEntity) PolicyBuilder {
+func (b *policyBuilder) WithRoute(measure interfaces.NotificationInterface) interfaces.PolicyBuilder {
+	if b.notificationInterfaces[constants.NotificationInterfaceCapability_Route] != nil {
+		return b
+	}
+	b.capabilities = append(b.capabilities, constants.NotificationInterfaceCapability_Route)
+	b.notificationInterfaces[constants.NotificationInterfaceCapability_Route] = measure
+	return b
+}
+
+func (b *policyBuilder) WithRouteCondition(condition string) interfaces.PolicyBuilder {
+	expression, err := govaluate.NewEvaluableExpression(condition)
+	if err != nil {
+		return b
+	}
+	b.routeConditions = append(b.routeConditions, expression)
+	return b
+}
+
+func (b *policyBuilder) WithAlert(measure interfaces.NotificationInterface) interfaces.PolicyBuilder {
+	if b.notificationInterfaces[constants.NotificationInterfaceCapability_Alert] != nil {
+		return b
+	}
+	b.capabilities = append(b.capabilities, constants.NotificationInterfaceCapability_Alert)
+	b.notificationInterfaces[constants.NotificationInterfaceCapability_Alert] = measure
+	return b
+}
+
+func (b *policyBuilder) WithAlertCondition(condition string) interfaces.PolicyBuilder {
+	expression, err := govaluate.NewEvaluableExpression(condition)
+	if err != nil {
+		return b
+	}
+	b.alertConditions = append(b.alertConditions, expression)
+	return b
+}
+
+func (b *policyBuilder) WithSchedule(measure interfaces.NotificationInterface) interfaces.PolicyBuilder {
+	if b.notificationInterfaces[constants.NotificationInterfaceCapability_Schedule] != nil {
+		return b
+	}
+	b.capabilities = append(b.capabilities, constants.NotificationInterfaceCapability_Schedule)
+	b.notificationInterfaces[constants.NotificationInterfaceCapability_Schedule] = measure
+	return b
+}
+
+func (b *policyBuilder) WithScheduleCondition(condition string) interfaces.PolicyBuilder {
+	expression, err := govaluate.NewEvaluableExpression(condition)
+	if err != nil {
+		return b
+	}
+	b.scheduleConditions = append(b.scheduleConditions, expression)
+	return b
+}
+
+func (b *policyBuilder) WithHeuristicEntity(entity interfaces.HeuristicEntity) interfaces.PolicyBuilder {
 	b.heuristicEntity = entity
 	return b
 }
 
-func (b *policyBuilder) Build() Policy {
+func (b *policyBuilder) Build() interfaces.Policy {
 	if b.name == "" {
 		return nil
 	}
 
 	if len(b.capabilities) == 0 {
+		fmt.Println("capabilities are not set")
 		return nil
 	}
 
-	if len(b.measures) == 0 {
+	if len(b.notificationInterfaces) == 0 {
+		fmt.Println("notification interfaces are not set")
 		return nil
 	}
 
-	/* TODO: add later
 	if b.heuristicEntity == nil {
+		fmt.Println("heuristic entity is not set")
 		return nil
 	}
-	*/
+
+	if len(b.preEvaluationConditions) == 0 {
+		fmt.Println("pre evaluation conditions are not set")
+		return nil
+	}
+
+	if len(b.evaluationConditions) == 0 {
+		fmt.Println("evaluation conditions are not set")
+		return nil
+	}
+
+	// verify, if notification interfaces are set, then at least one condition is set
+	if _, ok := b.notificationInterfaces[constants.NotificationInterfaceCapability_Alert]; ok {
+		if len(b.alertConditions) == 0 {
+			fmt.Println("alert conditions are not set")
+			return nil
+		}
+	}
+
+	if _, ok := b.notificationInterfaces[constants.NotificationInterfaceCapability_Route]; ok {
+		if len(b.routeConditions) == 0 {
+			fmt.Println("route conditions are not set")
+			return nil
+		}
+	}
+
+	if _, ok := b.notificationInterfaces[constants.NotificationInterfaceCapability_Schedule]; ok {
+		if len(b.scheduleConditions) == 0 {
+			fmt.Println("schedule conditions are not set")
+			return nil
+		}
+	}
 
 	policy := &policy{
-		name:            b.name,
-		capabilities:    b.capabilities,
-		measures:        b.measures,
-		heuristicEntity: b.heuristicEntity,
+		name:                    b.name,
+		heuristicEntity:         b.heuristicentity,
+		capabilities:            b.capabilities,
+		notificationInterfaces:  b.notificationInterfaces,
+		preEvaluationConditions: b.preEvaluationConditions,
+		evaluationConditions:    b.evaluationConditions,
+		alertConditions:         b.alertConditions,
+		routeConditions:         b.routeConditions,
+		scheduleConditions:      b.scheduleConditions,
 	}
 
 	// Reset internal state
 	b.name = ""
 	b.capabilities = nil
-	b.measures = make(map[types.PolicyNotificationCapability]interfaces.MeasureNotifier)
+	b.notificationInterfaces = make(map[types.NotificationInterfaceCapability]interfaces.NotificationInterface)
 
 	return policy
 }
 
-func (b *policyBuilder) MeasureFactory() interfaces.MeasureFactory {
-	return b.measureFactory
+func (b *policyBuilder) NotificationInterfaceFactory() interfaces.NotificationInterfaceFactory {
+	return b.notificationInterfaceFactory
 }

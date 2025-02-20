@@ -1,17 +1,17 @@
 package routing
 
 import (
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/processor"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
 	"go.uber.org/zap"
 )
 
 type routingEntity struct {
-	processors map[string]processor.HeuristicProcessor
+	processors map[string]interfaces.HeuristicProcessor
 	logger     *zap.Logger
 }
 
-func NewRoutingEntity(logger *zap.Logger) *routingEntity {
-	processors := make(map[string]processor.HeuristicProcessor)
+func NewRoutingEntity(logger *zap.Logger) interfaces.HeuristicEntity {
+	processors := make(map[string]interfaces.HeuristicProcessor)
 
 	// TODO: Add processors here
 
@@ -21,7 +21,7 @@ func NewRoutingEntity(logger *zap.Logger) *routingEntity {
 	}
 }
 
-func (r *routingEntity) EvaluatePolicy() error {
+func (r *routingEntity) Evaluate(values map[string]interface{}) map[string]interface{} {
 	r.logger.Info("Evaluating routing policy")
 	return nil
 }
@@ -36,7 +36,7 @@ func (r *routingEntity) Shutdown() error {
 	return nil
 }
 
-func (r *routingEntity) AddProcessor(identifier string, processor processor.HeuristicProcessor) {
+func (r *routingEntity) AddProcessor(identifier string, processor interfaces.HeuristicProcessor) {
 	if _, ok := r.processors[identifier]; ok {
 		r.logger.Error("Processor already exists", zap.String("identifier", identifier))
 		return
@@ -44,6 +44,6 @@ func (r *routingEntity) AddProcessor(identifier string, processor processor.Heur
 	r.processors[identifier] = processor
 }
 
-func (r *routingEntity) Processors() map[string]processor.HeuristicProcessor {
+func (r *routingEntity) Processors() map[string]interfaces.HeuristicProcessor {
 	return r.processors
 }

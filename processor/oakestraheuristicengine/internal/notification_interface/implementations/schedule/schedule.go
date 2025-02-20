@@ -1,4 +1,4 @@
-package implementations
+package schedule
 
 import (
 	"fmt"
@@ -16,12 +16,15 @@ type ScheduleConfig struct {
 	Endpoint  string  `mapstructure:"endpoint"`
 }
 
-var _ interfaces.MeasureNotifier = (*ScheduleNotifier)(nil)
+var _ interfaces.NotificationInterface = (*scheduleNotifier)(nil)
 
-type ScheduleNotifier struct {
+type scheduleNotifier struct {
+	host     string
+	port     int
+	endpoint string
 }
 
-func (s *ScheduleNotifier) Notify() error {
+func (s *scheduleNotifier) Notify() error {
 	host, port := os.Getenv("SCHEDULE_NOTIFIER_HOST"), os.Getenv("SCHEDULE_NOTIFIER_PORT")
 	if host == "" || port == "" {
 		return fmt.Errorf("SCHEDULE_NOTIFIER_HOST and SCHEDULE_NOTIFIER_PORT must be set")
@@ -36,6 +39,6 @@ func (s *ScheduleNotifier) Notify() error {
 	return nil
 }
 
-func (s *ScheduleNotifier) Type() types.MeasureType {
-	return constants.MeasureTypeSchedule
+func (s *scheduleNotifier) Type() types.NotificationInterfaceCapability {
+	return constants.NotificationInterfaceCapability_Schedule
 }

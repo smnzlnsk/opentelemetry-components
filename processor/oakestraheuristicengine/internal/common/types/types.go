@@ -1,13 +1,11 @@
 package types
 
 type HeuristicType string
-type MeasureType string
 
-type PolicyNotificationCapability int
+type NotificationInterfaceCapability int
 
-func (c PolicyNotificationCapability) String() string {
+func (c NotificationInterfaceCapability) String() string {
 	return [...]string{
-		"unknown",
 		"alert",
 		"schedule",
 		"route",

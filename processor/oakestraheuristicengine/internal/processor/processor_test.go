@@ -65,18 +65,3 @@ func TestHeuristicProcessorWorkflow(t *testing.T) {
 		})
 	}
 }
-
-// mockDecisionTree implements wpt.DecisionTree interface for testing
-type mockDecisionTree struct {
-	id string
-}
-
-var _ wpt.DecisionTree = (*mockDecisionTree)(nil)
-
-func (m *mockDecisionTree) Identifier() string {
-	return m.id
-}
-
-func (m *mockDecisionTree) Traverse(factor float64, params map[string]interface{}) (float64, error) {
-	return 0, nil
-}
