@@ -1,6 +1,8 @@
 package interfaces
 
-import "github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+import (
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+)
 
 type PolicyBuilder interface {
 	WithName(name string) PolicyBuilder
@@ -14,13 +16,18 @@ type PolicyBuilder interface {
 	WithAlert(measure NotificationInterface) PolicyBuilder
 	WithSchedule(measure NotificationInterface) PolicyBuilder
 	WithHeuristicEntity(entity HeuristicEntity) PolicyBuilder
-	NotificationInterfaceFactory() NotificationInterfaceFactory
+	NotificationInterfaceBuilder() NotificationInterfaceBuilder
 	Build() Policy
 }
 
 type Policy interface {
+	Check(values map[string]interface{}) error
 	Enforce(values map[string]interface{}) error
+	CheckPreEvaluationCondition(values map[string]interface{}) error
+	CheckEvaluationCondition(values map[string]interface{}) error
+	CheckNotificationConditions(values map[string]interface{}) error
 	Capabilities() []types.NotificationInterfaceCapability
 	Name() string
-	GetNotificationInterface(capability types.NotificationInterfaceCapability) NotificationInterface
+	HeuristicEngine() HeuristicEntity
+	NotificationInterface(capability types.NotificationInterfaceCapability) NotificationInterface
 }

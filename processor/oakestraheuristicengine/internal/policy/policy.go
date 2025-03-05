@@ -1,6 +1,8 @@
 package policy
 
 import (
+	"fmt"
+
 	"github.com/Knetic/govaluate"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
@@ -20,59 +22,85 @@ type policy struct {
 	scheduleConditions      []*govaluate.EvaluableExpression
 }
 
-func (p *policy) CheckPreEvaluationCondition() error {
-	for _, condition := range p.preEvaluationConditions {
-		result, err := condition.Evaluate(nil)
-		if err != nil {
-			return err
-		}
-		if result != true {
-			return nil
-		}
+var _ interfaces.Policy = &policy{}
+
+func (p *policy) Check(values map[string]interface{}) error {
+	err := p.CheckPreEvaluationCondition(values)
+	if err != nil {
+		return err
 	}
-	return nil
-}
-func (p *policy) CheckEvaluationCondition() error {
-	for _, condition := range p.evaluationConditions {
-		result, err := condition.Evaluate(nil)
-		if err != nil {
-			return err
-		}
-		if result != true {
-			return nil
-		}
+
+	err = p.CheckEvaluationCondition(values)
+	if err != nil {
+		return err
 	}
+
+	err = p.Enforce(values)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func (p *policy) CheckNotificationConditions(result map[string]interface{}) error {
-	for _, condition := range p.alertConditions {
-		result, err := condition.Evaluate(result)
+// returns nil (= success), if one pre evaluation condition is met
+func (p *policy) CheckPreEvaluationCondition(values map[string]interface{}) error {
+	for _, condition := range p.preEvaluationConditions {
+		result, err := condition.Evaluate(values)
 		if err != nil {
 			return err
 		}
 		if result == true {
-			return p.GetNotificationInterface(constants.NotificationInterfaceCapability_Alert).Notify()
+			return nil
+		}
+	}
+
+	return fmt.Errorf("pre evaluation conditions not met")
+}
+
+// returns nil (= success), if one evaluation condition is met
+func (p *policy) CheckEvaluationCondition(values map[string]interface{}) error {
+	for _, condition := range p.evaluationConditions {
+		result, err := condition.Evaluate(values)
+		if err != nil {
+			return err
+		}
+		if result == true {
+			return nil
+		}
+	}
+	return fmt.Errorf("evaluation conditions not met")
+}
+
+func (p *policy) CheckNotificationConditions(values map[string]interface{}) error {
+
+	for _, condition := range p.alertConditions {
+		result, err := condition.Evaluate(values)
+		if err != nil {
+			return err
+		}
+		if result == true {
+			return p.NotificationInterface(constants.NotificationInterfaceCapability_Alert).Notify()
 		}
 	}
 
 	for _, condition := range p.routeConditions {
-		result, err := condition.Evaluate(result)
+		result, err := condition.Evaluate(values)
 		if err != nil {
 			return err
 		}
 		if result == true {
-			return p.GetNotificationInterface(constants.NotificationInterfaceCapability_Route).Notify()
+			return p.NotificationInterface(constants.NotificationInterfaceCapability_Route).Notify()
 		}
 	}
 
 	for _, condition := range p.scheduleConditions {
-		result, err := condition.Evaluate(result)
+		result, err := condition.Evaluate(values)
 		if err != nil {
 			return err
 		}
 		if result == true {
-			return p.GetNotificationInterface(constants.NotificationInterfaceCapability_Schedule).Notify()
+			return p.NotificationInterface(constants.NotificationInterfaceCapability_Schedule).Notify()
 		}
 	}
 	return nil
@@ -90,6 +118,10 @@ func (p *policy) Name() string {
 	return p.name
 }
 
-func (p *policy) GetNotificationInterface(capability types.NotificationInterfaceCapability) interfaces.NotificationInterface {
+func (p *policy) HeuristicEngine() interfaces.HeuristicEntity {
+	return p.heuristicEntity
+}
+
+func (p *policy) NotificationInterface(capability types.NotificationInterfaceCapability) interfaces.NotificationInterface {
 	return p.notificationInterfaces[capability]
 }

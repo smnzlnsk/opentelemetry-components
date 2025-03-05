@@ -12,6 +12,7 @@ type NotificationInterfaceBuilder interface {
 	WithHost(host string) NotificationInterfaceBuilder
 	WithPort(port int) NotificationInterfaceBuilder
 	WithEndpoint(endpoint string) NotificationInterfaceBuilder
+	WithCapability(capability types.NotificationInterfaceCapability) NotificationInterfaceBuilder
 	Build() NotificationInterface
 }
 

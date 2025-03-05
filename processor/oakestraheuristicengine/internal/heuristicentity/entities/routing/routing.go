@@ -22,8 +22,7 @@ func NewRoutingEntity(logger *zap.Logger) interfaces.HeuristicEntity {
 }
 
 func (r *routingEntity) Evaluate(values map[string]interface{}) map[string]interface{} {
-	r.logger.Info("Evaluating routing policy")
-	return nil
+	return values
 }
 
 func (r *routingEntity) Start() error {

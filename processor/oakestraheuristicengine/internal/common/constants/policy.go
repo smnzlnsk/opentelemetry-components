@@ -6,4 +6,5 @@ const (
 	NotificationInterfaceCapability_Alert types.NotificationInterfaceCapability = iota
 	NotificationInterfaceCapability_Schedule
 	NotificationInterfaceCapability_Route
+	NotificationInterfaceCapability_Unknown
 )

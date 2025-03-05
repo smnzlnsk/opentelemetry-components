@@ -1,8 +1,6 @@
 package oakestraheuristicengine
 
 import (
-	"errors"
-
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/notification_interface"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap"
@@ -23,9 +21,9 @@ var _ confmap.Unmarshaler = (*Config)(nil)
 
 // Validate checks if the processor configuration is valid
 func (cfg *Config) Validate() error {
-	if len(cfg.NotificationInterfaces) == 0 {
+	/*if len(cfg.NotificationInterfaces) == 0 {
 		return errors.New("must provide at least one notification interface")
-	}
+	}*/
 	return nil
 }
 

@@ -1,6 +1,10 @@
 package route
 
-import "github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
+import (
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+)
 
 type routeNotifierBuilder struct {
 	host     string
@@ -27,10 +31,15 @@ func (r *routeNotifierBuilder) WithEndpoint(endpoint string) interfaces.Notifica
 	return r
 }
 
+func (r *routeNotifierBuilder) WithCapability(capability types.NotificationInterfaceCapability) interfaces.NotificationInterfaceBuilder {
+	return r
+}
+
 func (r *routeNotifierBuilder) Build() interfaces.NotificationInterface {
 	return &routeNotifier{
-		host:     r.host,
-		port:     r.port,
-		endpoint: r.endpoint,
+		host:       r.host,
+		port:       r.port,
+		endpoint:   r.endpoint,
+		capability: constants.NotificationInterfaceCapability_Route,
 	}
 }

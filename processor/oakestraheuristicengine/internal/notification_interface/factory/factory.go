@@ -1,7 +1,6 @@
 package factory
 
 import (
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/notification_interface/implementations/alert"
@@ -24,11 +23,11 @@ func NewNotificationInterfaceFactory(logger *zap.Logger) interfaces.Notification
 
 func (f *notificationInterfaceFactory) CreateNotificationInterfaceBuilder(interfaceType types.NotificationInterfaceCapability) interfaces.NotificationInterfaceBuilder {
 	switch interfaceType {
-	case constants.NotificationInterfaceCapability_Route:
+	case types.NotificationInterfaceCapability_Route:
 		return route.NewRouteNotifierBuilder()
-	case constants.NotificationInterfaceCapability_Alert:
+	case types.NotificationInterfaceCapability_Alert:
 		return alert.NewAlertNotifierBuilder()
-	case constants.NotificationInterfaceCapability_Schedule:
+	case types.NotificationInterfaceCapability_Schedule:
 		return schedule.NewScheduleNotifierBuilder()
 	default:
 		return nil

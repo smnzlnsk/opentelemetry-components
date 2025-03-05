@@ -24,7 +24,7 @@ type heuristicEngineProcessor struct {
 	logger       *zap.Logger
 
 	// reponsible to store metrics
-	metricStore metricstore.MetricStore
+	metricStore interfaces.MetricStore
 
 	// policies
 	policies              map[string]interfaces.Policy
@@ -73,6 +73,23 @@ func newProcessor(config *Config, set processor.Settings, next consumer.Metrics)
 // ConsumeMetrics is called when the processor receives metrics
 // it saves the metrics to history for later use
 func (p *heuristicEngineProcessor) ConsumeMetrics(ctx context.Context, md pmetric.Metrics) error {
+	/*err := internal.SaveMetricsToFile(md)
+	if err != nil {
+		p.logger.Error("failed to save metrics to file", zap.Error(err))
+	}
+	p.logger.Info("saved metrics to file", zap.Int("metrics", md.ResourceMetrics().Len()))
+	*/
+	err := p.metricStore.Save(md)
+	if err != nil {
+		p.logger.Error("failed to save metrics to metric store", zap.Error(err))
+	}
+
+	values := p.metricStore.GetValueMapByString()
+
+	for _, policy := range p.policies {
+		policy.Check(values)
+	}
+
 	return p.nextConsumer.ConsumeMetrics(ctx, md)
 }
 
@@ -89,20 +106,21 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 
 	// initialize policies
 	policyBuilder := policy.NewPolicyBuilder()
-	notificationInterfaceFactory := policyBuilder.NotificationInterfaceFactory()
-	buildInterface := notificationInterfaceFactory.CreateNotificationInterfaceBuilder
+	notificationInterfaceBuilder := notification_interface.NewNotificationInterfaceBuilder()
 
 	// define notifiers
-	routeNotifier := buildInterface(constants.NotificationInterfaceCapability_Route).
+	routeNotifier := notificationInterfaceBuilder.
 		WithHost("localhost").
 		WithPort(8080).
 		WithEndpoint("/route").
+		WithCapability(constants.NotificationInterfaceCapability_Route).
 		Build()
 
-	alertNotifier := buildInterface(constants.NotificationInterfaceCapability_Alert).
+	alertNotifier := notificationInterfaceBuilder.
 		WithHost("localhost").
 		WithPort(8080).
 		WithEndpoint("/alert").
+		WithCapability(constants.NotificationInterfaceCapability_Alert).
 		Build()
 
 	// Define policy configurations with their associated heuristic engine types
@@ -140,7 +158,7 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 			WithAlert(cfg.alertNotifier).
 			WithAlertCondition("true").
 			WithRoute(cfg.routeNotifier).
-			WithRouteCondition("true").
+			WithRouteCondition("false").
 			Build()
 
 		// Register policy and its engine mapping
