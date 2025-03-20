@@ -5,9 +5,10 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric"
 )
 
-type TreeStore interface {
-	Add(identifier string, decisionTree DecisionTree) error
-	Get(identifier string) DecisionTree
+type ProcessorStore interface {
+	Add(processor Processor) error
+	Get(identifier string) Processor
+	GetAll() map[string]Processor
 }
 
 type MetricStore interface {

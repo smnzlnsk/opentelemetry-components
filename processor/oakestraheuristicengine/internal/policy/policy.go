@@ -24,6 +24,8 @@ type policy struct {
 
 var _ interfaces.Policy = &policy{}
 
+// Check checks if the policy is to be evaluated
+// Returns nil if the policy is to be evaluated, otherwise an error is returned
 func (p *policy) Check(values map[string]interface{}) error {
 	err := p.CheckPreEvaluationCondition(values)
 	if err != nil {
@@ -34,12 +36,6 @@ func (p *policy) Check(values map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-
-	err = p.Enforce(values)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -105,9 +101,10 @@ func (p *policy) CheckNotificationConditions(values map[string]interface{}) erro
 	}
 	return nil
 }
-func (p *policy) Enforce(values map[string]interface{}) error {
-	result := p.heuristicEntity.Evaluate(values)
-	return p.CheckNotificationConditions(result)
+func (p *policy) Enforce(processorIdentifier string, values map[string]interface{}) error {
+	result := p.heuristicEntity.Evaluate(processorIdentifier, values)
+	values["result"] = result
+	return p.CheckNotificationConditions(values)
 }
 
 func (p *policy) Capabilities() []types.NotificationInterfaceCapability {

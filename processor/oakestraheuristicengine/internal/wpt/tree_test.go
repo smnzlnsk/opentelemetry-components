@@ -9,14 +9,14 @@ import (
 func TestBuilder(t *testing.T) {
 	tests := []struct {
 		name     string
-		build    func() interfaces.DecisionTree
+		build    func() interfaces.Evaluator
 		params   map[string]interface{}
 		expected float64
 	}{
 		{
 			name: "single node",
-			build: func() interfaces.DecisionTree {
-				return NewBuilder("x > 5", 2.0, 0.5).BuildTree("test")
+			build: func() interfaces.Evaluator {
+				return NewBuilder("x > 5", 2.0, 0.5).BuildTree("test", 1.0)
 			},
 			params: map[string]interface{}{
 				"x": 10,
@@ -25,11 +25,11 @@ func TestBuilder(t *testing.T) {
 		},
 		{
 			name: "simple tree with comparison",
-			build: func() interfaces.DecisionTree {
+			build: func() interfaces.Evaluator {
 				builder := NewBuilder("x > y", 2.0, 0.5)
 				builder.Left("z == true", 3.0, 0.3)
 				builder.Right("z == false", 4.0, 0.4)
-				return builder.BuildTree("test")
+				return builder.BuildTree("test", 1.0)
 			},
 			params: map[string]interface{}{
 				"x": 10,
@@ -40,12 +40,12 @@ func TestBuilder(t *testing.T) {
 		},
 		{
 			name: "complex tree with boolean weights",
-			build: func() interfaces.DecisionTree {
+			build: func() interfaces.Evaluator {
 				builder := NewBuilder("x > 0 && y < 10", 2.0, 0.5)
 				leftNode := builder.Left("z == false", 3.0, 0.3)
 				leftNode.Left("a == true", 4.0, 0.4)
 				leftNode.Right("a == false", 5.0, 0.5)
-				return builder.BuildTree("test")
+				return builder.BuildTree("test", 1.0)
 			},
 			params: map[string]interface{}{
 				"x": 5,
@@ -60,10 +60,7 @@ func TestBuilder(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tree := tt.build()
-			result, err := tree.Traverse(1.0, tt.params)
-			if err != nil {
-				t.Errorf("%s: expected no error, got %v", tt.name, err)
-			}
+			result := tree.Evaluate(1.0, tt.params)
 			if result != tt.expected {
 				t.Errorf("%s: expected %f, got %f", tt.name, tt.expected, result)
 			}

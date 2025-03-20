@@ -32,7 +32,7 @@ func newDecisionNode(decision string, trueWeight, falseWeight float64, left, rig
 	}
 }
 
-func newDecisionTree(identifier string, root interfaces.Node) interfaces.DecisionTree {
+func newDecisionTree(identifier string, root interfaces.Node) interfaces.Evaluator {
 	return &decisionTree{
 		identifier: identifier,
 		root:       root,
@@ -43,35 +43,34 @@ func (d *decisionTree) Identifier() string {
 	return d.identifier
 }
 
-func (n *node) Evaluate(factor float64, params map[string]interface{}) (float64, error) {
-	// Evaluate the decision and apply the appropriate weight
+func (d *decisionTree) Evaluate(factor float64, params map[string]interface{}) float64 {
+	return d.root.Evaluate(factor, params)
+}
+
+func (n *node) Evaluate(factor float64, params map[string]interface{}) float64 {
 	isTrue, err := evaluateDecision(n.decision, params)
 	if err != nil {
-		return 0, err
+		return 0
 	}
 	newFactor := factor * (map[bool]float64{true: n.trueWeight, false: n.falseWeight})[isTrue]
 
 	// If both children are nil, return the weighted factor
 	if n.left == nil && n.right == nil {
-		return newFactor, nil
+		return newFactor
 	}
 
 	// Continue traversal based on the decision
 	if isTrue {
 		if n.left == nil {
-			return newFactor, nil
+			return newFactor
 		}
 		return n.left.Evaluate(newFactor, params)
 	}
 
 	if n.right == nil {
-		return newFactor, nil
+		return newFactor
 	}
 	return n.right.Evaluate(newFactor, params)
-}
-
-func (d *decisionTree) Traverse(initialFactor float64, params map[string]interface{}) (float64, error) {
-	return d.root.Evaluate(initialFactor, params)
 }
 
 // Helper function to evaluate boolean expressions using govaluate

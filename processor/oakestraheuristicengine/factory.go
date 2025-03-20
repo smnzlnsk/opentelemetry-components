@@ -19,7 +19,13 @@ func NewFactory() processor.Factory {
 }
 
 func createDefaultConfig() component.Config {
-	return &Config{}
+	return &Config{
+		HTTPServer: HTTPServerConfig{
+			Enabled: true,
+			Port:    8080,
+			Host:    "0.0.0.0",
+		},
+	}
 }
 
 func createMetricsProcessor(

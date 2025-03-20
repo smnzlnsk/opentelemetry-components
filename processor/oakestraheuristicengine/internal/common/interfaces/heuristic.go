@@ -9,9 +9,9 @@ type HeuristicEntityFactory interface {
 }
 
 type HeuristicEntity interface {
-	Processors() map[string]HeuristicProcessor
-	AddProcessor(identifier string, processor HeuristicProcessor)
-	Evaluate(values map[string]interface{}) map[string]interface{}
+	Processors() map[string]Processor
+	AddProcessor(processor Processor)
+	Evaluate(processorIdentifier string, values map[string]interface{}) float64
 	Start() error
 	Shutdown() error
 }

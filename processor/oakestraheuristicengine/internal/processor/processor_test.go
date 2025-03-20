@@ -9,29 +9,25 @@ import (
 
 func TestNewHeuristicProcessor(t *testing.T) {
 	// Create mock decision trees
-	tree1 := wpt.NewBuilder("x > 5", 2.0, 0.5).BuildTree("tree1")
-	tree2 := wpt.NewBuilder("x > 5", 2.0, 0.5).BuildTree("tree2")
+	tree1 := wpt.NewBuilder("x > 5", 2.0, 0.5).BuildTree("tree1", 1.0)
 
 	// Initialize processor with mock trees
-	processor := NewHeuristicProcessor("test_processor", tree1, tree2)
+	processor := NewProcessor("test_processor", tree1)
 
 	// Assert processor was created
 	assert.NotNil(t, processor)
 
 	// Assert trees were added to store
-	storedTree1 := processor.GetStore().Get("tree1")
+	storedTree1 := processor.Evaluator()
 	assert.Equal(t, tree1, storedTree1)
-
-	storedTree2 := processor.GetStore().Get("tree2")
-	assert.Equal(t, tree2, storedTree2)
 }
 
 func TestHeuristicProcessorWorkflow(t *testing.T) {
 	// Create a decision tree that checks if x > 5
 	// If true, returns 1.0, if false returns 2.0
-	testTree := wpt.NewBuilder("x > 5", 1.0, 2.0).BuildTree("test_tree")
+	testTree := wpt.NewBuilder("x > 5", 1.0, 2.0).BuildTree("test_tree", 1.0)
 
-	processor := NewHeuristicProcessor("test_processor", testTree)
+	processor := NewProcessor("test_processor", testTree)
 
 	// Test cases
 	testCases := []struct {
@@ -57,10 +53,7 @@ func TestHeuristicProcessorWorkflow(t *testing.T) {
 	// Run test cases
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			score, err := processor.Execute(tc.identifier, tc.params)
-			if err != nil {
-				t.Errorf("%s: expected no error, got %v", tc.name, err)
-			}
+			score := processor.Process(tc.params)
 			assert.Equal(t, tc.expectedScore, score)
 		})
 	}

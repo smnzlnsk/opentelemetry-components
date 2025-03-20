@@ -1,4 +1,4 @@
-package wpt
+package processor
 
 import (
 	"testing"
@@ -27,10 +27,10 @@ func TestStore_Add(t *testing.T) {
 	s := NewStore()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockTree := &mockDecisionTree{}
+			mockProcessor := &mockProcessor{}
 
 			// First addition
-			err := s.Add(tt.identifier, mockTree)
+			err := s.Add(mockProcessor)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("store.Add() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -40,27 +40,28 @@ func TestStore_Add(t *testing.T) {
 
 func TestStore_Get(t *testing.T) {
 	s := NewStore()
-	mockTree := &mockDecisionTree{}
-	identifier := "test-tree"
+	mockProcessor := &mockProcessor{
+		identifier: "test-processor",
+	}
 
 	// Add a tree to retrieve later
-	err := s.Add(identifier, mockTree)
+	err := s.Add(mockProcessor)
 	if err != nil {
-		t.Fatalf("Failed to add decision tree: %v", err)
+		t.Fatalf("Failed to add processor: %v", err)
 	}
 
 	tests := []struct {
 		name       string
 		identifier string
-		want       interfaces.DecisionTree
+		want       interfaces.Processor
 	}{
 		{
-			name:       "get existing decision tree",
-			identifier: "test-tree",
-			want:       mockTree,
+			name:       "get existing processor",
+			identifier: "test-processor",
+			want:       mockProcessor,
 		},
 		{
-			name:       "get non-existent decision tree",
+			name:       "get non-existent processor",
 			identifier: "non-existent",
 			want:       nil,
 		},
@@ -76,7 +77,19 @@ func TestStore_Get(t *testing.T) {
 	}
 }
 
-// mockDecisionTree is a simple mock implementation of DecisionTree interface
-type mockDecisionTree struct {
-	interfaces.DecisionTree
+// mockProcessor is a simple mock implementation of Processor interface
+type mockProcessor struct {
+	identifier string
+}
+
+func (m *mockProcessor) Identifier() string {
+	return m.identifier
+}
+
+func (m *mockProcessor) Evaluator() interfaces.Evaluator {
+	return nil
+}
+
+func (m *mockProcessor) Process(params map[string]interface{}) float64 {
+	return 0
 }

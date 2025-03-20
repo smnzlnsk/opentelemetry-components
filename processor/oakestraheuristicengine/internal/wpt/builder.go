@@ -3,7 +3,7 @@ package wpt
 import "github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
 
 type builder struct {
-	decision    string
+	expression  string
 	trueWeight  float64 // weight to apply when expression is true
 	falseWeight float64 // weight to apply when expression is false
 	left        *builder
@@ -11,43 +11,43 @@ type builder struct {
 	parent      *builder
 }
 
-func NewBuilder(decision string, trueWeight, falseWeight float64) interfaces.TreeBuilder {
+func NewBuilder(expression string, trueWeight, falseWeight float64) interfaces.TreeBuilder {
 	return &builder{
-		decision:    decision,
+		expression:  expression,
 		trueWeight:  trueWeight,
 		falseWeight: falseWeight,
 	}
 }
 
-func (b *builder) Left(decision string, trueWeight, falseWeight float64) interfaces.TreeBuilder {
-	childBuilder := NewBuilder(decision, trueWeight, falseWeight)
-	childBuilder.(*builder).parent = b
-	b.left = childBuilder.(*builder)
+func (b *builder) Left(expression string, trueWeight, falseWeight float64) interfaces.TreeBuilder {
+	childBuilder := NewBuilder(expression, trueWeight, falseWeight).(*builder)
+	childBuilder.parent = b
+	b.left = childBuilder
 	return childBuilder
 }
 
-func (b *builder) Right(decision string, trueWeight, falseWeight float64) interfaces.TreeBuilder {
-	childBuilder := NewBuilder(decision, trueWeight, falseWeight)
-	childBuilder.(*builder).parent = b
-	b.right = childBuilder.(*builder)
+func (b *builder) Right(expression string, trueWeight, falseWeight float64) interfaces.TreeBuilder {
+	childBuilder := NewBuilder(expression, trueWeight, falseWeight).(*builder)
+	childBuilder.parent = b
+	b.right = childBuilder
 	return childBuilder
 }
 
-func (b *builder) Build() interfaces.Node {
+func (b *builder) BuildNode() interfaces.Node {
 	var leftNode, rightNode interfaces.Node
 	if b.left != nil {
-		leftNode = b.left.Build()
+		leftNode = b.left.BuildNode()
 	}
 	if b.right != nil {
-		rightNode = b.right.Build()
+		rightNode = b.right.BuildNode()
 	}
-	return newDecisionNode(b.decision, b.trueWeight, b.falseWeight, leftNode, rightNode)
+	return newDecisionNode(b.expression, b.trueWeight, b.falseWeight, leftNode, rightNode)
 }
 
-func (b *builder) BuildTree(identifier string) interfaces.DecisionTree {
+func (b *builder) BuildTree(identifier string, initialValue float64) interfaces.Evaluator {
 	root := b
 	for root.parent != nil {
 		root = root.parent
 	}
-	return newDecisionTree(identifier, root.Build())
+	return newDecisionTree(identifier, root.BuildNode())
 }

@@ -22,7 +22,7 @@ type PolicyBuilder interface {
 
 type Policy interface {
 	Check(values map[string]interface{}) error
-	Enforce(values map[string]interface{}) error
+	Enforce(processorIdentifier string, values map[string]interface{}) error
 	CheckPreEvaluationCondition(values map[string]interface{}) error
 	CheckEvaluationCondition(values map[string]interface{}) error
 	CheckNotificationConditions(values map[string]interface{}) error

@@ -22,9 +22,6 @@ func (n *notificationInterface) Notify() error {
 		"message":             "test",
 	}
 
-	fmt.Println("Sending notification to", n.host, n.port, n.endpoint)
-	fmt.Println("Data:", jsonData)
-
 	data, err := json.Marshal(jsonData)
 	if err != nil {
 		return err

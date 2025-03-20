@@ -2,35 +2,29 @@ package processor
 
 import (
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/wpt"
 )
 
-// heuristicProcessor implements interfaces.HeuristicProcessor
-type heuristicProcessor struct {
-	identifier        string
-	decisionTreeStore interfaces.TreeStore
+// processor implements interfaces.Processor
+type processor struct {
+	identifier string
+	evaluator  interfaces.Evaluator
 }
 
-func NewHeuristicProcessor(identifier string, decisionTrees ...interfaces.DecisionTree) interfaces.HeuristicProcessor {
-	decisionTreeStore := wpt.NewStore()
-	for _, decisionTree := range decisionTrees {
-		decisionTreeStore.Add(decisionTree.Identifier(), decisionTree)
-	}
-	return &heuristicProcessor{
-		identifier:        identifier,
-		decisionTreeStore: decisionTreeStore,
+func NewProcessor(identifier string, evaluator interfaces.Evaluator) interfaces.Processor {
+	return &processor{
+		identifier: identifier,
+		evaluator:  evaluator,
 	}
 }
 
-func (h *heuristicProcessor) GetStore() interfaces.TreeStore {
-	return h.decisionTreeStore
+func (p *processor) Identifier() string {
+	return p.identifier
 }
 
-func (h *heuristicProcessor) Identifier() string {
-	return h.identifier
+func (p *processor) Evaluator() interfaces.Evaluator {
+	return p.evaluator
 }
 
-func (h *heuristicProcessor) Execute(treeIdentifier string, params map[string]interface{}) (float64, error) {
-	decisionTree := h.decisionTreeStore.Get(treeIdentifier)
-	return decisionTree.Traverse(1, params)
+func (p *processor) Process(params map[string]interface{}) float64 {
+	return p.evaluator.Evaluate(1, params)
 }

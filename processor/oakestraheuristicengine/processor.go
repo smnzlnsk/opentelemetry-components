@@ -8,6 +8,7 @@ import (
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/heuristicentity"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/http"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/metricstore"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/notification_interface"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/policy"
@@ -37,6 +38,9 @@ type heuristicEngineProcessor struct {
 	activeEntities map[types.HeuristicType]interfaces.HeuristicEntity
 	// reponsible to store available entities, needed for initialization
 	availableEntities []types.HeuristicType
+
+	// http server
+	httpServer *http.Server
 }
 
 func newProcessor(config *Config, set processor.Settings, next consumer.Metrics) (*heuristicEngineProcessor, error) {
@@ -67,29 +71,33 @@ func newProcessor(config *Config, set processor.Settings, next consumer.Metrics)
 		notificationInterfaceRegistry: notification_interface.NewNotificationInterfaceRegistry(set.Logger),
 		activeEntities:                activeEntities,
 		availableEntities:             availableEntities,
+		httpServer:                    nil,
 	}, nil
 }
 
 // ConsumeMetrics is called when the processor receives metrics
 // it saves the metrics to history for later use
 func (p *heuristicEngineProcessor) ConsumeMetrics(ctx context.Context, md pmetric.Metrics) error {
-	/*err := internal.SaveMetricsToFile(md)
-	if err != nil {
-		p.logger.Error("failed to save metrics to file", zap.Error(err))
-	}
-	p.logger.Info("saved metrics to file", zap.Int("metrics", md.ResourceMetrics().Len()))
-	*/
 	err := p.metricStore.Save(md)
 	if err != nil {
 		p.logger.Error("failed to save metrics to metric store", zap.Error(err))
 	}
 
-	values := p.metricStore.GetValueMapByString()
+	// values := p.metricStore.GetValueMapByString()
 
-	for _, policy := range p.policies {
-		policy.Check(values)
-	}
-
+	/*for _, policy := range p.policies {
+		err := policy.Check(values)
+		if err == nil {
+			// If check passes, enforce the policy which will trigger notifications
+			processors := policy.HeuristicEngine().Processors()
+			for processorIdentifier := range processors {
+				err = policy.Enforce(processorIdentifier, values)
+				if err != nil {
+					p.logger.Error("failed to enforce policy", zap.String("policy", policy.Name()), zap.Error(err))
+				}
+			}
+		}
+	}*/
 	return p.nextConsumer.ConsumeMetrics(ctx, md)
 }
 
@@ -132,7 +140,7 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 		scheduleNotifier interfaces.NotificationInterface
 	}{
 		{
-			name:             "routing-policy",
+			name:             "routing",
 			engineType:       constants.RoutingEntity,
 			alertNotifier:    alertNotifier,
 			routeNotifier:    routeNotifier,
@@ -166,10 +174,35 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 		p.policyToEngineMapping[policy.Name()] = engine
 	}
 
+	// setup http server if enabled
+	if p.config.HTTPServer.Enabled {
+		serverConfig := http.ServerConfig{
+			Host: p.config.HTTPServer.Host,
+			Port: p.config.HTTPServer.Port,
+		}
+		p.httpServer = http.NewServer(serverConfig, p.logger, p.policies, p.metricStore)
+		if err := p.httpServer.Start(); err != nil {
+			p.logger.Error("Failed to start HTTP server", zap.Error(err))
+			return err
+		}
+		p.logger.Info("Started HTTP server",
+			zap.String("host", p.config.HTTPServer.Host),
+			zap.Int("port", p.config.HTTPServer.Port))
+	}
+
 	return nil
 }
 
-func (p *heuristicEngineProcessor) Shutdown(_ context.Context) error {
+func (p *heuristicEngineProcessor) Shutdown(ctx context.Context) error {
+	// First shut down the HTTP server if it exists
+	if p.httpServer != nil {
+		if err := p.httpServer.Shutdown(ctx); err != nil {
+			p.logger.Error("Failed to shut down HTTP server", zap.Error(err))
+			// Continue with shutdown even if HTTP server shutdown fails
+		}
+	}
+
+	// Then shut down all entities
 	for _, entity := range p.activeEntities {
 		if err := entity.Shutdown(); err != nil {
 			return err

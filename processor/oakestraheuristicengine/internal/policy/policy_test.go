@@ -13,14 +13,14 @@ import (
 // MockHeuristicEntity implements interfaces.HeuristicEntity
 type pmockHeuristicEntity struct {
 	interfaces.HeuristicEntity
-	evaluateFunc func(map[string]interface{}) map[string]interface{}
+	evaluateFunc func(processorIdentifier string, values map[string]interface{}) float64
 }
 
-func (m *pmockHeuristicEntity) Evaluate(values map[string]interface{}) map[string]interface{} {
+func (m *pmockHeuristicEntity) Evaluate(processorIdentifier string, values map[string]interface{}) float64 {
 	if m.evaluateFunc != nil {
-		return m.evaluateFunc(values)
+		return m.evaluateFunc(processorIdentifier, values)
 	}
-	return values
+	return values["result"].(float64)
 }
 
 // MockNotificationInterface implements interfaces.NotificationInterface
@@ -42,18 +42,16 @@ func TestPolicy(t *testing.T) {
 
 	// Create mock heuristic entity
 	mockHeuristic := &pmockHeuristicEntity{
-		evaluateFunc: func(values map[string]interface{}) map[string]interface{} {
-			return map[string]interface{}{
-				"score": 95,
-			}
+		evaluateFunc: func(processorIdentifier string, values map[string]interface{}) float64 {
+			return 95
 		},
 	}
 
 	// Create test expressions
 	preEvalExpr, _ := govaluate.NewEvaluableExpression("true")
 	evalExpr, _ := govaluate.NewEvaluableExpression("true")
-	alertExpr, _ := govaluate.NewEvaluableExpression("score > 90")
-	routeExpr, _ := govaluate.NewEvaluableExpression("score <= 90")
+	alertExpr, _ := govaluate.NewEvaluableExpression("result > 90")
+	routeExpr, _ := govaluate.NewEvaluableExpression("result <= 90")
 
 	// Create policy
 	p := &policy{
@@ -89,7 +87,7 @@ func TestPolicy(t *testing.T) {
 	})
 
 	t.Run("TestEnforceWithAlert", func(t *testing.T) {
-		err := p.Enforce(map[string]interface{}{})
+		err := p.Enforce("test_processor", map[string]interface{}{})
 		assert.NoError(t, err)
 		assert.True(t, mockAlert.notified)
 		assert.False(t, mockRoute.notified)
@@ -101,13 +99,11 @@ func TestPolicy(t *testing.T) {
 		mockRoute.notified = false
 
 		// Update mock to return lower score
-		mockHeuristic.evaluateFunc = func(values map[string]interface{}) map[string]interface{} {
-			return map[string]interface{}{
-				"score": 85,
-			}
+		mockHeuristic.evaluateFunc = func(processorIdentifier string, values map[string]interface{}) float64 {
+			return 85
 		}
 
-		err := p.Enforce(map[string]interface{}{})
+		err := p.Enforce("test_processor", map[string]interface{}{})
 		assert.NoError(t, err)
 		assert.False(t, mockAlert.notified)
 		assert.True(t, mockRoute.notified)

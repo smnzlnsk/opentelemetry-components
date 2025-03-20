@@ -1,7 +1,7 @@
 package interfaces
 
-type HeuristicProcessor interface {
-	GetStore() TreeStore
+type Processor interface {
 	Identifier() string
-	Execute(treeIdentifier string, params map[string]interface{}) (float64, error)
+	Process(params map[string]interface{}) float64
+	Evaluator() Evaluator
 }
