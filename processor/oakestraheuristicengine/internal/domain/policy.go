@@ -1,8 +1,4 @@
-package interfaces
-
-import (
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
-)
+package domain
 
 type PolicyBuilder interface {
 	WithName(name string) PolicyBuilder
@@ -22,12 +18,12 @@ type PolicyBuilder interface {
 
 type Policy interface {
 	Check(values map[string]interface{}) error
-	Enforce(processorIdentifier string, values map[string]interface{}) error
+	Enforce(processorIdentifier string, appname string, values map[string]interface{}) error
 	CheckPreEvaluationCondition(values map[string]interface{}) error
 	CheckEvaluationCondition(values map[string]interface{}) error
 	CheckNotificationConditions(values map[string]interface{}) error
-	Capabilities() []types.NotificationInterfaceCapability
+	Capabilities() []NotificationInterfaceCapability
 	Name() string
 	HeuristicEngine() HeuristicEntity
-	NotificationInterface(capability types.NotificationInterfaceCapability) NotificationInterface
+	NotificationInterface(capability NotificationInterfaceCapability) NotificationInterface
 }

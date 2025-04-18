@@ -1,9 +1,7 @@
 package schedule
 
 import (
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
 type scheduleNotifierBuilder struct {
@@ -12,34 +10,34 @@ type scheduleNotifierBuilder struct {
 	endpoint string
 }
 
-func NewScheduleNotifierBuilder() interfaces.NotificationInterfaceBuilder {
+func NewScheduleNotifierBuilder() domain.NotificationInterfaceBuilder {
 	return &scheduleNotifierBuilder{}
 }
 
-func (s *scheduleNotifierBuilder) WithHost(host string) interfaces.NotificationInterfaceBuilder {
+func (s *scheduleNotifierBuilder) WithHost(host string) domain.NotificationInterfaceBuilder {
 	s.host = host
 	return s
 }
 
-func (s *scheduleNotifierBuilder) WithPort(port int) interfaces.NotificationInterfaceBuilder {
+func (s *scheduleNotifierBuilder) WithPort(port int) domain.NotificationInterfaceBuilder {
 	s.port = port
 	return s
 }
 
-func (s *scheduleNotifierBuilder) WithEndpoint(endpoint string) interfaces.NotificationInterfaceBuilder {
+func (s *scheduleNotifierBuilder) WithEndpoint(endpoint string) domain.NotificationInterfaceBuilder {
 	s.endpoint = endpoint
 	return s
 }
 
-func (s *scheduleNotifierBuilder) WithCapability(capability types.NotificationInterfaceCapability) interfaces.NotificationInterfaceBuilder {
+func (s *scheduleNotifierBuilder) WithCapability(capability domain.NotificationInterfaceCapability) domain.NotificationInterfaceBuilder {
 	return s
 }
 
-func (s *scheduleNotifierBuilder) Build() interfaces.NotificationInterface {
+func (s *scheduleNotifierBuilder) Build() domain.NotificationInterface {
 	return &scheduleNotifier{
 		host:       s.host,
 		port:       s.port,
 		endpoint:   s.endpoint,
-		capability: constants.NotificationInterfaceCapability_Schedule,
+		capability: domain.NotificationInterfaceCapability_Schedule,
 	}
 }

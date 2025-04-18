@@ -1,10 +1,9 @@
-package metricstore
+package memory
 
 import (
 	"testing"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -19,10 +18,10 @@ func TestMetricStore_Basic(t *testing.T) {
 	ms := NewMetricStore(logger)
 
 	// Test storing and retrieving a simple metric
-	key := types.MetricKey{
+	key := domain.MetricKey{
 		Name:  "test_metric",
 		State: "normal",
-		Type:  constants.MetricValueTypeRaw,
+		Type:  domain.MetricValueTypeRaw,
 	}
 
 	// Store a value
@@ -35,10 +34,10 @@ func TestMetricStore_Basic(t *testing.T) {
 	assert.Equal(t, 42.0, value)
 
 	// Test that derived metrics were calculated
-	avgKey := types.MetricKey{
+	avgKey := domain.MetricKey{
 		Name:  "test_metric",
 		State: "normal",
-		Type:  constants.MetricValueTypeAvg,
+		Type:  domain.MetricValueTypeAvg,
 	}
 
 	avgValue := ms.GetValueForMetricKey(avgKey)
@@ -53,10 +52,10 @@ func TestMetricStore_Complex(t *testing.T) {
 	ms := NewMetricStore(logger)
 
 	// Test storing multiple values and checking statistics
-	key := types.MetricKey{
+	key := domain.MetricKey{
 		Name:  "complex_metric",
 		State: "warning",
-		Type:  constants.MetricValueTypeRaw,
+		Type:  domain.MetricValueTypeRaw,
 	}
 
 	// Store multiple values to test statistics calculation
@@ -70,46 +69,46 @@ func TestMetricStore_Complex(t *testing.T) {
 	assert.Equal(t, 50.0, rawValue)
 
 	// Test average
-	avgKey := types.MetricKey{
+	avgKey := domain.MetricKey{
 		Name:  "complex_metric",
 		State: "warning",
-		Type:  constants.MetricValueTypeAvg,
+		Type:  domain.MetricValueTypeAvg,
 	}
 	avgValue := ms.GetValueForMetricKey(avgKey)
 	assert.Equal(t, 30.0, avgValue)
 
 	// Test min
-	minKey := types.MetricKey{
+	minKey := domain.MetricKey{
 		Name:  "complex_metric",
 		State: "warning",
-		Type:  constants.MetricValueTypeMin,
+		Type:  domain.MetricValueTypeMin,
 	}
 	minValue := ms.GetValueForMetricKey(minKey)
 	assert.Equal(t, 10.0, minValue)
 
 	// Test max
-	maxKey := types.MetricKey{
+	maxKey := domain.MetricKey{
 		Name:  "complex_metric",
 		State: "warning",
-		Type:  constants.MetricValueTypeMax,
+		Type:  domain.MetricValueTypeMax,
 	}
 	maxValue := ms.GetValueForMetricKey(maxKey)
 	assert.Equal(t, 50.0, maxValue)
 
 	// Test count
-	countKey := types.MetricKey{
+	countKey := domain.MetricKey{
 		Name:  "complex_metric",
 		State: "warning",
-		Type:  constants.MetricValueTypeCount,
+		Type:  domain.MetricValueTypeCount,
 	}
 	countValue := ms.GetValueForMetricKey(countKey)
 	assert.Equal(t, 5.0, countValue)
 
 	// Test stddev
-	stddevKey := types.MetricKey{
+	stddevKey := domain.MetricKey{
 		Name:  "complex_metric",
 		State: "warning",
-		Type:  constants.MetricValueTypeStdDev,
+		Type:  domain.MetricValueTypeStdDev,
 	}
 	stddevValue := ms.GetValueForMetricKey(stddevKey)
 	// Expected stddev for [10,20,30,40,50] with mean 30 is sqrt(200) = 14.142...
@@ -139,18 +138,18 @@ func TestMetricStore_Save(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify that metrics were stored correctly
-	gaugeKey := types.MetricKey{
+	gaugeKey := domain.MetricKey{
 		Name:  "test_gauge",
 		State: "normal",
-		Type:  constants.MetricValueTypeRaw,
+		Type:  domain.MetricValueTypeRaw,
 	}
 	gaugeValue := ms.GetValueForMetricKey(gaugeKey)
 	assert.Equal(t, 123.45, gaugeValue)
 
-	sumKey := types.MetricKey{
+	sumKey := domain.MetricKey{
 		Name:  "test_sum",
 		State: "critical",
-		Type:  constants.MetricValueTypeRaw,
+		Type:  domain.MetricValueTypeRaw,
 	}
 	sumValue := ms.GetValueForMetricKey(sumKey)
 	assert.Equal(t, 678.0, sumValue)
@@ -164,10 +163,10 @@ func TestMetricStore_Error(t *testing.T) {
 	ms := NewMetricStore(logger)
 
 	// Test retrieving a non-existent metric
-	nonExistentKey := types.MetricKey{
+	nonExistentKey := domain.MetricKey{
 		Name:  "non_existent",
 		State: "unknown",
-		Type:  constants.MetricValueTypeRaw,
+		Type:  domain.MetricValueTypeRaw,
 	}
 
 	value := ms.GetValueForMetricKey(nonExistentKey)
@@ -188,10 +187,10 @@ func TestMetricStore_Error(t *testing.T) {
 	assert.NoError(t, err, "Save should not return an error even with invalid metrics")
 
 	// The invalid metric should not be stored
-	invalidKey := types.MetricKey{
+	invalidKey := domain.MetricKey{
 		Name:  "invalid_metric",
 		State: "",
-		Type:  constants.MetricValueTypeRaw,
+		Type:  domain.MetricValueTypeRaw,
 	}
 
 	invalidValue := ms.GetValueForMetricKey(invalidKey)
@@ -251,8 +250,8 @@ func TestMetricStore_GetValueMapByMetricKey(t *testing.T) {
 	ms := NewMetricStore(logger)
 
 	// Store some test metrics
-	ms.Store(types.MetricKey{Name: "test1", State: "normal", Type: constants.MetricValueTypeRaw}, 100.0)
-	ms.Store(types.MetricKey{Name: "test2", State: "warning", Type: constants.MetricValueTypeRaw}, 200.0)
+	ms.Store(domain.MetricKey{Name: "test1", State: "normal", Type: domain.MetricValueTypeRaw}, 100.0)
+	ms.Store(domain.MetricKey{Name: "test2", State: "warning", Type: domain.MetricValueTypeRaw}, 200.0)
 
 	// The current implementation returns nil, so we should test that
 	valueMap := ms.GetValueMapByMetricKey()
@@ -269,10 +268,10 @@ func TestMetricStore_HistoryLimit(t *testing.T) {
 	ms := NewMetricStore(logger)
 
 	// Test that the store only keeps the last 5 values
-	key := types.MetricKey{
+	key := domain.MetricKey{
 		Name:  "history_test",
 		State: "normal",
-		Type:  constants.MetricValueTypeRaw,
+		Type:  domain.MetricValueTypeRaw,
 	}
 
 	// Store more than 5 values
@@ -285,10 +284,10 @@ func TestMetricStore_HistoryLimit(t *testing.T) {
 	assert.Equal(t, 9.0, value)
 
 	// The average should be calculated from the last 5 values (5,6,7,8,9)
-	avgKey := types.MetricKey{
+	avgKey := domain.MetricKey{
 		Name:  "history_test",
 		State: "normal",
-		Type:  constants.MetricValueTypeAvg,
+		Type:  domain.MetricValueTypeAvg,
 	}
 	avgValue := ms.GetValueForMetricKey(avgKey)
 	assert.Equal(t, 7.0, avgValue)
@@ -314,10 +313,10 @@ func TestMetricStore_ExtractDataPoints(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify the metric was stored
-	key := types.MetricKey{
+	key := domain.MetricKey{
 		Name:  "test_extract",
 		State: "normal",
-		Type:  constants.MetricValueTypeRaw,
+		Type:  domain.MetricValueTypeRaw,
 	}
 	value := ms.GetValueForMetricKey(key)
 	assert.Equal(t, 42.0, value)

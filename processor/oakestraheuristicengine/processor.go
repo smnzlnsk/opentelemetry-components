@@ -3,15 +3,17 @@ package oakestraheuristicengine
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/heuristicentity"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/http"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/metricstore"
+	internalhttp "github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/http"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/notification_interface"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/persistence/memory"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/persistence/mongodb"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/policy"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/repository"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/service"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -25,34 +27,41 @@ type heuristicEngineProcessor struct {
 	logger       *zap.Logger
 
 	// reponsible to store metrics
-	metricStore interfaces.MetricStore
+	metricStore domain.MetricStore
+
+	// database client
+	mongodbClient *mongodb.Client
+	repositories  *repository.Repositories
+
+	// services
+	services *service.Services
 
 	// policies
-	policies              map[string]interfaces.Policy
-	policyToEngineMapping map[string]interfaces.HeuristicEntity
+	policies              map[string]domain.Policy
+	policyToEngineMapping map[string]domain.HeuristicEntity
 
 	// registry of notification interfaces
-	notificationInterfaceRegistry interfaces.NotificationInterfaceRegistry
+	notificationInterfaceRegistry domain.NotificationInterfaceRegistry
 
 	// collection of active entities
-	activeEntities map[types.HeuristicType]interfaces.HeuristicEntity
+	activeEntities map[domain.HeuristicType]domain.HeuristicEntity
 	// reponsible to store available entities, needed for initialization
-	availableEntities []types.HeuristicType
+	availableEntities []domain.HeuristicType
 
 	// http server
-	httpServer *http.Server
+	httpServer *internalhttp.Server
 }
 
 func newProcessor(config *Config, set processor.Settings, next consumer.Metrics) (*heuristicEngineProcessor, error) {
 	// TODO: add more entities here
-	availableEntities := []types.HeuristicType{
-		constants.RoutingEntity,
+	availableEntities := []domain.HeuristicType{
+		domain.RoutingEntity,
 	}
 	// initialize entity factory
 	entityFactory := heuristicentity.NewHeuristicEntityFactory(set.Logger)
 
 	// initialize active entities
-	activeEntities := make(map[types.HeuristicType]interfaces.HeuristicEntity)
+	activeEntities := make(map[domain.HeuristicType]domain.HeuristicEntity)
 	for _, entityType := range availableEntities {
 		entity, err := entityFactory.CreateHeuristicEntity(entityType)
 		if err != nil {
@@ -65,13 +74,17 @@ func newProcessor(config *Config, set processor.Settings, next consumer.Metrics)
 		config:                        config,
 		nextConsumer:                  next,
 		logger:                        set.Logger,
-		metricStore:                   metricstore.NewMetricStore(set.Logger),
-		policies:                      make(map[string]interfaces.Policy),
-		policyToEngineMapping:         make(map[string]interfaces.HeuristicEntity),
+		metricStore:                   memory.NewMetricStore(set.Logger),
+		policies:                      make(map[string]domain.Policy),
+		policyToEngineMapping:         make(map[string]domain.HeuristicEntity),
 		notificationInterfaceRegistry: notification_interface.NewNotificationInterfaceRegistry(set.Logger),
 		activeEntities:                activeEntities,
 		availableEntities:             availableEntities,
-		httpServer:                    nil,
+
+		// created on Start
+		httpServer:    nil,
+		mongodbClient: nil,
+		repositories:  nil,
 	}, nil
 }
 
@@ -81,6 +94,12 @@ func (p *heuristicEngineProcessor) ConsumeMetrics(ctx context.Context, md pmetri
 	err := p.metricStore.Save(md)
 	if err != nil {
 		p.logger.Error("failed to save metrics to metric store", zap.Error(err))
+	}
+
+	// save metrics to database
+	err = p.services.MonitoringService.SaveMetrics(ctx, md)
+	if err != nil {
+		p.logger.Error("failed to save metrics to database", zap.Error(err))
 	}
 
 	// values := p.metricStore.GetValueMapByString()
@@ -106,6 +125,19 @@ func (p *heuristicEngineProcessor) Capabilities() consumer.Capabilities {
 }
 
 func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) error {
+
+	// initialize mongodb client
+	dbClient, err := mongodb.NewClient(&p.config.MongoDB, p.logger)
+	if err != nil {
+		return err
+	}
+
+	p.mongodbClient = dbClient
+	p.repositories = repository.NewRepositories(dbClient, p.logger)
+
+	// initialize services
+	p.services = service.NewServices(p.repositories, p.logger)
+
 	for _, entity := range p.activeEntities {
 		if err := entity.Start(); err != nil {
 			return err
@@ -117,33 +149,40 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 	notificationInterfaceBuilder := notification_interface.NewNotificationInterfaceBuilder()
 
 	// define notifiers
-	routeNotifier := notificationInterfaceBuilder.
-		WithHost("localhost").
-		WithPort(8080).
-		WithEndpoint("/route").
-		WithCapability(constants.NotificationInterfaceCapability_Route).
-		Build()
+	/*routeNotifier := notificationInterfaceBuilder.
+	WithHost("localhost").
+	WithPort(8080).
+	WithEndpoint("/route").
+	WithCapability(domain.NotificationInterfaceCapability_Route).
+	Build()*/
 
 	alertNotifier := notificationInterfaceBuilder.
 		WithHost("localhost").
-		WithPort(8080).
-		WithEndpoint("/alert").
-		WithCapability(constants.NotificationInterfaceCapability_Alert).
+		WithPort(8091).
+		WithEndpoint("/api/v1/alert").
+		WithCapability(domain.NotificationInterfaceCapability_Alert).
+		Build()
+
+	routingNotifier := notificationInterfaceBuilder.
+		WithHost("localhost").
+		WithPort(8091).
+		WithEndpoint("/api/v1/routing").
+		WithCapability(domain.NotificationInterfaceCapability_Route).
 		Build()
 
 	// Define policy configurations with their associated heuristic engine types
 	policyConfigs := []struct {
 		name             string
-		engineType       types.HeuristicType
-		alertNotifier    interfaces.NotificationInterface
-		routeNotifier    interfaces.NotificationInterface
-		scheduleNotifier interfaces.NotificationInterface
+		engineType       domain.HeuristicType
+		alertNotifier    domain.NotificationInterface
+		routeNotifier    domain.NotificationInterface
+		scheduleNotifier domain.NotificationInterface
 	}{
 		{
 			name:             "routing",
-			engineType:       constants.RoutingEntity,
+			engineType:       domain.RoutingEntity,
 			alertNotifier:    alertNotifier,
-			routeNotifier:    routeNotifier,
+			routeNotifier:    routingNotifier,
 			scheduleNotifier: nil,
 		},
 		// Add more policy configurations here
@@ -166,7 +205,7 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 			WithAlert(cfg.alertNotifier).
 			WithAlertCondition("true").
 			WithRoute(cfg.routeNotifier).
-			WithRouteCondition("false").
+			WithRouteCondition("true").
 			Build()
 
 		// Register policy and its engine mapping
@@ -176,11 +215,11 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 
 	// setup http server if enabled
 	if p.config.HTTPServer.Enabled {
-		serverConfig := http.ServerConfig{
+		serverConfig := internalhttp.ServerConfig{
 			Host: p.config.HTTPServer.Host,
 			Port: p.config.HTTPServer.Port,
 		}
-		p.httpServer = http.NewServer(serverConfig, p.logger, p.policies, p.metricStore)
+		p.httpServer = internalhttp.NewServer(serverConfig, p.logger, p.policies, p.metricStore)
 		if err := p.httpServer.Start(); err != nil {
 			p.logger.Error("Failed to start HTTP server", zap.Error(err))
 			return err
@@ -194,19 +233,45 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 }
 
 func (p *heuristicEngineProcessor) Shutdown(ctx context.Context) error {
+	var shutdownErrs []error
+
 	// First shut down the HTTP server if it exists
 	if p.httpServer != nil {
-		if err := p.httpServer.Shutdown(ctx); err != nil {
-			p.logger.Error("Failed to shut down HTTP server", zap.Error(err))
+		// Create a timeout context specifically for HTTP server shutdown
+		httpCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+
+		if err := p.httpServer.Shutdown(httpCtx); err != nil {
+			p.logger.Error("Failed to gracefully shut down HTTP server", zap.Error(err))
+			shutdownErrs = append(shutdownErrs, fmt.Errorf("HTTP server shutdown: %w", err))
 			// Continue with shutdown even if HTTP server shutdown fails
+		} else {
+			p.logger.Info("HTTP server shutdown successful")
 		}
 	}
 
 	// Then shut down all entities
-	for _, entity := range p.activeEntities {
+	for entityType, entity := range p.activeEntities {
 		if err := entity.Shutdown(); err != nil {
-			return err
+			p.logger.Error("Failed to shut down entity", zap.String("entityType", string(entityType)), zap.Error(err))
+			shutdownErrs = append(shutdownErrs, fmt.Errorf("entity %s shutdown: %w", entityType, err))
+			// Continue with other shutdowns
 		}
 	}
+
+	// Close MongoDB client
+	if p.mongodbClient != nil {
+		if err := p.mongodbClient.Close(ctx); err != nil {
+			p.logger.Error("Failed to close MongoDB client", zap.Error(err))
+			shutdownErrs = append(shutdownErrs, fmt.Errorf("MongoDB client close: %w", err))
+		}
+	}
+
+	// If we had any errors during shutdown, return a combined error
+	if len(shutdownErrs) > 0 {
+		return fmt.Errorf("shutdown encountered %d errors: %v", len(shutdownErrs), shutdownErrs)
+	}
+
+	p.logger.Info("Processor shutdown complete")
 	return nil
 }

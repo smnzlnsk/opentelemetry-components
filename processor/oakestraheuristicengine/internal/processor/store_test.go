@@ -3,7 +3,7 @@ package processor
 import (
 	"testing"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
 func TestStore_Add(t *testing.T) {
@@ -53,7 +53,7 @@ func TestStore_Get(t *testing.T) {
 	tests := []struct {
 		name       string
 		identifier string
-		want       interfaces.Processor
+		want       domain.Processor
 	}{
 		{
 			name:       "get existing processor",
@@ -86,10 +86,15 @@ func (m *mockProcessor) Identifier() string {
 	return m.identifier
 }
 
-func (m *mockProcessor) Evaluator() interfaces.Evaluator {
+func (m *mockProcessor) Evaluator() domain.Evaluator {
 	return nil
 }
 
-func (m *mockProcessor) Process(params map[string]interface{}) float64 {
-	return 0
+func (m *mockProcessor) Process(jobname string, params map[string]interface{}) domain.Evaluation {
+	return domain.Evaluation{
+		JobName: jobname,
+		Entries: []domain.EvaluationEntry{
+			{InstanceNumber: 1, Priority: 1.0},
+		},
+	}
 }

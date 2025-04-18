@@ -1,6 +1,6 @@
 package wpt
 
-import "github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
+import "github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 
 type builder struct {
 	expression  string
@@ -11,7 +11,7 @@ type builder struct {
 	parent      *builder
 }
 
-func NewBuilder(expression string, trueWeight, falseWeight float64) interfaces.TreeBuilder {
+func NewBuilder(expression string, trueWeight, falseWeight float64) domain.TreeBuilder {
 	return &builder{
 		expression:  expression,
 		trueWeight:  trueWeight,
@@ -19,22 +19,22 @@ func NewBuilder(expression string, trueWeight, falseWeight float64) interfaces.T
 	}
 }
 
-func (b *builder) Left(expression string, trueWeight, falseWeight float64) interfaces.TreeBuilder {
+func (b *builder) Left(expression string, trueWeight, falseWeight float64) domain.TreeBuilder {
 	childBuilder := NewBuilder(expression, trueWeight, falseWeight).(*builder)
 	childBuilder.parent = b
 	b.left = childBuilder
 	return childBuilder
 }
 
-func (b *builder) Right(expression string, trueWeight, falseWeight float64) interfaces.TreeBuilder {
+func (b *builder) Right(expression string, trueWeight, falseWeight float64) domain.TreeBuilder {
 	childBuilder := NewBuilder(expression, trueWeight, falseWeight).(*builder)
 	childBuilder.parent = b
 	b.right = childBuilder
 	return childBuilder
 }
 
-func (b *builder) BuildNode() interfaces.Node {
-	var leftNode, rightNode interfaces.Node
+func (b *builder) BuildNode() domain.Node {
+	var leftNode, rightNode domain.Node
 	if b.left != nil {
 		leftNode = b.left.BuildNode()
 	}
@@ -44,7 +44,7 @@ func (b *builder) BuildNode() interfaces.Node {
 	return newDecisionNode(b.expression, b.trueWeight, b.falseWeight, leftNode, rightNode)
 }
 
-func (b *builder) BuildTree(identifier string, initialValue float64) interfaces.Evaluator {
+func (b *builder) BuildTree(identifier string, initialValue float64) domain.Evaluator {
 	root := b
 	for root.parent != nil {
 		root = root.parent

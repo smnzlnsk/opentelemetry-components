@@ -4,13 +4,13 @@ import (
 	"fmt"
 
 	"github.com/Knetic/govaluate"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
 // node implements interfaces.Node
 type node struct {
-	left        interfaces.Node
-	right       interfaces.Node
+	left        domain.Node
+	right       domain.Node
 	decision    string
 	trueWeight  float64
 	falseWeight float64
@@ -19,10 +19,10 @@ type node struct {
 // decisionTree implements interfaces.DecisionTree
 type decisionTree struct {
 	identifier string
-	root       interfaces.Node
+	root       domain.Node
 }
 
-func newDecisionNode(decision string, trueWeight, falseWeight float64, left, right interfaces.Node) interfaces.Node {
+func newDecisionNode(decision string, trueWeight, falseWeight float64, left, right domain.Node) domain.Node {
 	return &node{
 		decision:    decision,
 		trueWeight:  trueWeight,
@@ -32,7 +32,7 @@ func newDecisionNode(decision string, trueWeight, falseWeight float64, left, rig
 	}
 }
 
-func newDecisionTree(identifier string, root interfaces.Node) interfaces.Evaluator {
+func newDecisionTree(identifier string, root domain.Node) domain.Evaluator {
 	return &decisionTree{
 		identifier: identifier,
 		root:       root,

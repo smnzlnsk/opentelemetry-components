@@ -3,6 +3,7 @@ package oakestraheuristicengine
 import (
 	"context"
 
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/config"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/metadata"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
@@ -20,10 +21,16 @@ func NewFactory() processor.Factory {
 
 func createDefaultConfig() component.Config {
 	return &Config{
-		HTTPServer: HTTPServerConfig{
+		HTTPServer: config.HTTPServerConfig{
 			Enabled: true,
 			Port:    8080,
 			Host:    "0.0.0.0",
+		},
+		MongoDB: config.MongoDBConfig{
+			Host:     "localhost",
+			Port:     27017,
+			User:     "",
+			Password: "",
 		},
 	}
 }

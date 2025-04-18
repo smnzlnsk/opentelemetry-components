@@ -11,9 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/policy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,21 +31,26 @@ func (m *mockProcessor) Identifier() string {
 	return m.id
 }
 
-func (m *mockProcessor) Evaluator() interfaces.Evaluator {
+func (m *mockProcessor) Evaluator() domain.Evaluator {
 	return nil // Not needed for tests
 }
 
-func (m *mockProcessor) Process(params map[string]interface{}) float64 {
-	return 0.5 // Return a fixed value for testing
+func (m *mockProcessor) Process(jobname string, params map[string]interface{}) domain.Evaluation {
+	return domain.Evaluation{
+		JobName: jobname,
+		Entries: []domain.EvaluationEntry{
+			{InstanceNumber: 1, Priority: 0.5},
+		},
+	}
 }
 
 // mockHeuristicEntity implements interfaces.HeuristicEntity
 type mockHeuristicEntity struct {
-	processors map[string]interfaces.Processor
+	processors map[string]domain.Processor
 }
 
 func newMockHeuristicEntity() *mockHeuristicEntity {
-	processors := make(map[string]interfaces.Processor)
+	processors := make(map[string]domain.Processor)
 	processors["routing"] = &mockProcessor{id: "routing"}
 
 	return &mockHeuristicEntity{
@@ -63,32 +66,37 @@ func (m *mockHeuristicEntity) Shutdown() error {
 	return nil
 }
 
-func (m *mockHeuristicEntity) Evaluate(processorIdentifier string, values map[string]interface{}) float64 {
+func (m *mockHeuristicEntity) Evaluate(processorIdentifier string, jobname string, values map[string]interface{}) domain.Evaluation {
 	// Just return a fixed value for testing
-	return 0.75
+	return domain.Evaluation{
+		JobName: jobname,
+		Entries: []domain.EvaluationEntry{
+			{InstanceNumber: 1, Priority: 0.75},
+		},
+	}
 }
 
-func (m *mockHeuristicEntity) Processors() map[string]interfaces.Processor {
+func (m *mockHeuristicEntity) Processors() map[string]domain.Processor {
 	return m.processors
 }
 
-func (m *mockHeuristicEntity) AddProcessor(processor interfaces.Processor) {
+func (m *mockHeuristicEntity) AddProcessor(processor domain.Processor) {
 	m.processors[processor.Identifier()] = processor
 }
 
 // mockTestProcessor is a simplified version of heuristicEngineProcessor for testing
 type mockTestProcessor struct {
-	policies              map[string]interfaces.Policy
-	policyToEngineMapping map[string]interfaces.HeuristicEntity
-	activeEntities        map[types.HeuristicType]interfaces.HeuristicEntity
+	policies              map[string]domain.Policy
+	policyToEngineMapping map[string]domain.HeuristicEntity
+	activeEntities        map[domain.HeuristicType]domain.HeuristicEntity
 	nextConsumer          consumertest.Consumer
 }
 
 func newMockTestProcessor() *mockTestProcessor {
 	return &mockTestProcessor{
-		policies:              make(map[string]interfaces.Policy),
-		policyToEngineMapping: make(map[string]interfaces.HeuristicEntity),
-		activeEntities:        make(map[types.HeuristicType]interfaces.HeuristicEntity),
+		policies:              make(map[string]domain.Policy),
+		policyToEngineMapping: make(map[string]domain.HeuristicEntity),
+		activeEntities:        make(map[domain.HeuristicType]domain.HeuristicEntity),
 		nextConsumer:          consumertest.NewNop(),
 	}
 }
@@ -123,7 +131,7 @@ func TestHeuristicEngineProcessorWithAlertNotification(t *testing.T) {
 	mockProc := newMockTestProcessor()
 
 	// Initialize the mock processor
-	mockProc.activeEntities[constants.RoutingEntity] = newMockHeuristicEntity()
+	mockProc.activeEntities[domain.RoutingEntity] = newMockHeuristicEntity()
 
 	// Create policy builder
 	policyBuilder := policy.NewPolicyBuilder()
@@ -131,7 +139,7 @@ func TestHeuristicEngineProcessorWithAlertNotification(t *testing.T) {
 	// Create alert notifier with its own builder
 	alertNotifierBuilder := policyBuilder.NotificationInterfaceBuilder()
 	alertNotifier := alertNotifierBuilder.
-		WithCapability(constants.NotificationInterfaceCapability_Alert).
+		WithCapability(domain.NotificationInterfaceCapability_Alert).
 		WithHost(alertHost).
 		WithPort(alertPort).
 		WithEndpoint("/alert").
@@ -142,14 +150,14 @@ func TestHeuristicEngineProcessorWithAlertNotification(t *testing.T) {
 		WithName("test-alert-policy").
 		WithPreEvaluationCondition("true").
 		WithEvaluationCondition("true").
-		WithHeuristicEngine(mockProc.activeEntities[constants.RoutingEntity]).
+		WithHeuristicEngine(mockProc.activeEntities[domain.RoutingEntity]).
 		WithAlert(alertNotifier).
 		WithAlertCondition("true"). // Always trigger alert
 		Build()
 
 	// Register the policy
 	mockProc.policies[alertPolicy.Name()] = alertPolicy
-	mockProc.policyToEngineMapping[alertPolicy.Name()] = mockProc.activeEntities[constants.RoutingEntity]
+	mockProc.policyToEngineMapping[alertPolicy.Name()] = mockProc.activeEntities[domain.RoutingEntity]
 
 	// We expect an alert notification
 	alertWg.Add(1)
@@ -171,7 +179,7 @@ func TestHeuristicEngineProcessorWithAlertNotification(t *testing.T) {
 			// If check passes, enforce the policy which will trigger notifications
 			processors := policy.HeuristicEngine().Processors()
 			for processorIdentifier := range processors {
-				err = policy.Enforce(processorIdentifier, values)
+				err = policy.Enforce(processorIdentifier, "test-job", values)
 				if err != nil {
 					t.Logf("Error enforcing policy: %v", err)
 				}
@@ -228,7 +236,7 @@ func TestHeuristicEngineProcessorWithRouteNotification(t *testing.T) {
 	mockProc := newMockTestProcessor()
 
 	// Initialize the mock processor
-	mockProc.activeEntities[constants.RoutingEntity] = newMockHeuristicEntity()
+	mockProc.activeEntities[domain.RoutingEntity] = newMockHeuristicEntity()
 
 	// Create policy builder
 	policyBuilder := policy.NewPolicyBuilder()
@@ -236,7 +244,7 @@ func TestHeuristicEngineProcessorWithRouteNotification(t *testing.T) {
 	// Create route notifier with its own builder
 	routeNotifierBuilder := policyBuilder.NotificationInterfaceBuilder()
 	routeNotifier := routeNotifierBuilder.
-		WithCapability(constants.NotificationInterfaceCapability_Route).
+		WithCapability(domain.NotificationInterfaceCapability_Route).
 		WithHost(routeHost).
 		WithPort(routePort).
 		WithEndpoint("/route").
@@ -247,14 +255,14 @@ func TestHeuristicEngineProcessorWithRouteNotification(t *testing.T) {
 		WithName("test-route-policy").
 		WithPreEvaluationCondition("true").
 		WithEvaluationCondition("true").
-		WithHeuristicEngine(mockProc.activeEntities[constants.RoutingEntity]).
+		WithHeuristicEngine(mockProc.activeEntities[domain.RoutingEntity]).
 		WithRoute(routeNotifier).
 		WithRouteCondition("true"). // Always trigger route
 		Build()
 
 	// Register the policy
 	mockProc.policies[routePolicy.Name()] = routePolicy
-	mockProc.policyToEngineMapping[routePolicy.Name()] = mockProc.activeEntities[constants.RoutingEntity]
+	mockProc.policyToEngineMapping[routePolicy.Name()] = mockProc.activeEntities[domain.RoutingEntity]
 
 	// We expect a route notification
 	routeWg.Add(1)
@@ -276,7 +284,7 @@ func TestHeuristicEngineProcessorWithRouteNotification(t *testing.T) {
 			// If check passes, enforce the policy which will trigger notifications
 			processors := policy.HeuristicEngine().Processors()
 			for processorIdentifier := range processors {
-				err = policy.Enforce(processorIdentifier, values)
+				err = policy.Enforce(processorIdentifier, "test-job", values)
 				if err != nil {
 					t.Logf("Error enforcing policy: %v", err)
 				}
@@ -351,7 +359,7 @@ func TestHeuristicEngineProcessorWithFallbackToRouteNotification(t *testing.T) {
 	mockProc := newMockTestProcessor()
 
 	// Initialize the mock processor
-	mockProc.activeEntities[constants.RoutingEntity] = newMockHeuristicEntity()
+	mockProc.activeEntities[domain.RoutingEntity] = newMockHeuristicEntity()
 
 	// Create policy builder
 	policyBuilder := policy.NewPolicyBuilder()
@@ -359,7 +367,7 @@ func TestHeuristicEngineProcessorWithFallbackToRouteNotification(t *testing.T) {
 	// Create alert notifier with its own builder
 	alertNotifierBuilder := policyBuilder.NotificationInterfaceBuilder()
 	alertNotifier := alertNotifierBuilder.
-		WithCapability(constants.NotificationInterfaceCapability_Alert).
+		WithCapability(domain.NotificationInterfaceCapability_Alert).
 		WithHost(alertHost).
 		WithPort(alertPort).
 		WithEndpoint("/alert").
@@ -368,7 +376,7 @@ func TestHeuristicEngineProcessorWithFallbackToRouteNotification(t *testing.T) {
 	// Create route notifier with its own builder
 	routeNotifierBuilder := policyBuilder.NotificationInterfaceBuilder()
 	routeNotifier := routeNotifierBuilder.
-		WithCapability(constants.NotificationInterfaceCapability_Route).
+		WithCapability(domain.NotificationInterfaceCapability_Route).
 		WithHost(routeHost).
 		WithPort(routePort).
 		WithEndpoint("/route").
@@ -379,7 +387,7 @@ func TestHeuristicEngineProcessorWithFallbackToRouteNotification(t *testing.T) {
 		WithName("test-fallback-policy").
 		WithPreEvaluationCondition("true").
 		WithEvaluationCondition("true").
-		WithHeuristicEngine(mockProc.activeEntities[constants.RoutingEntity]).
+		WithHeuristicEngine(mockProc.activeEntities[domain.RoutingEntity]).
 		WithAlert(alertNotifier).
 		WithAlertCondition("false"). // Alert condition is NOT met
 		WithRoute(routeNotifier).
@@ -388,7 +396,7 @@ func TestHeuristicEngineProcessorWithFallbackToRouteNotification(t *testing.T) {
 
 	// Register the policy
 	mockProc.policies[fallbackPolicy.Name()] = fallbackPolicy
-	mockProc.policyToEngineMapping[fallbackPolicy.Name()] = mockProc.activeEntities[constants.RoutingEntity]
+	mockProc.policyToEngineMapping[fallbackPolicy.Name()] = mockProc.activeEntities[domain.RoutingEntity]
 
 	// We expect only a route notification, not an alert
 	routeWg.Add(1)
@@ -410,7 +418,7 @@ func TestHeuristicEngineProcessorWithFallbackToRouteNotification(t *testing.T) {
 			// If check passes, enforce the policy which will trigger notifications
 			processors := policy.HeuristicEngine().Processors()
 			for processorIdentifier := range processors {
-				err = policy.Enforce(processorIdentifier, values)
+				err = policy.Enforce(processorIdentifier, "test-job", values)
 				if err != nil {
 					t.Logf("Error enforcing policy: %v", err)
 				}

@@ -4,28 +4,31 @@ import (
 	"testing"
 
 	"github.com/Knetic/govaluate"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"github.com/stretchr/testify/assert"
 )
 
 // MockHeuristicEntity implements interfaces.HeuristicEntity
 type pmockHeuristicEntity struct {
-	interfaces.HeuristicEntity
-	evaluateFunc func(processorIdentifier string, values map[string]interface{}) float64
+	domain.HeuristicEntity
+	evaluateFunc func(processorIdentifier string, jobname string, values map[string]interface{}) domain.Evaluation
 }
 
-func (m *pmockHeuristicEntity) Evaluate(processorIdentifier string, values map[string]interface{}) float64 {
+func (m *pmockHeuristicEntity) Evaluate(processorIdentifier string, jobname string, values map[string]interface{}) domain.Evaluation {
 	if m.evaluateFunc != nil {
-		return m.evaluateFunc(processorIdentifier, values)
+		return m.evaluateFunc(processorIdentifier, jobname, values)
 	}
-	return values["result"].(float64)
+	return domain.Evaluation{
+		JobName: jobname,
+		Entries: []domain.EvaluationEntry{
+			{InstanceNumber: 1, Priority: 1.0},
+		},
+	}
 }
 
 // MockNotificationInterface implements interfaces.NotificationInterface
 type pmockNotificationInterface struct {
-	interfaces.NotificationInterface
+	domain.NotificationInterface
 	notified bool
 	err      error
 }
@@ -42,8 +45,13 @@ func TestPolicy(t *testing.T) {
 
 	// Create mock heuristic entity
 	mockHeuristic := &pmockHeuristicEntity{
-		evaluateFunc: func(processorIdentifier string, values map[string]interface{}) float64 {
-			return 95
+		evaluateFunc: func(processorIdentifier string, jobname string, values map[string]interface{}) domain.Evaluation {
+			return domain.Evaluation{
+				JobName: jobname,
+				Entries: []domain.EvaluationEntry{
+					{InstanceNumber: 1, Priority: 95},
+				},
+			}
 		},
 	}
 
@@ -56,13 +64,13 @@ func TestPolicy(t *testing.T) {
 	// Create policy
 	p := &policy{
 		name: "test_policy",
-		capabilities: []types.NotificationInterfaceCapability{
-			constants.NotificationInterfaceCapability_Alert,
-			constants.NotificationInterfaceCapability_Route,
+		capabilities: []domain.NotificationInterfaceCapability{
+			domain.NotificationInterfaceCapability_Alert,
+			domain.NotificationInterfaceCapability_Route,
 		},
-		notificationInterfaces: map[types.NotificationInterfaceCapability]interfaces.NotificationInterface{
-			constants.NotificationInterfaceCapability_Alert: mockAlert,
-			constants.NotificationInterfaceCapability_Route: mockRoute,
+		notificationInterfaces: map[domain.NotificationInterfaceCapability]domain.NotificationInterface{
+			domain.NotificationInterfaceCapability_Alert: mockAlert,
+			domain.NotificationInterfaceCapability_Route: mockRoute,
 		},
 		heuristicEntity:         mockHeuristic,
 		preEvaluationConditions: []*govaluate.EvaluableExpression{preEvalExpr},
@@ -87,7 +95,7 @@ func TestPolicy(t *testing.T) {
 	})
 
 	t.Run("TestEnforceWithAlert", func(t *testing.T) {
-		err := p.Enforce("test_processor", map[string]interface{}{})
+		err := p.Enforce("test_processor", "test_job", map[string]interface{}{})
 		assert.NoError(t, err)
 		assert.True(t, mockAlert.notified)
 		assert.False(t, mockRoute.notified)
@@ -99,11 +107,16 @@ func TestPolicy(t *testing.T) {
 		mockRoute.notified = false
 
 		// Update mock to return lower score
-		mockHeuristic.evaluateFunc = func(processorIdentifier string, values map[string]interface{}) float64 {
-			return 85
+		mockHeuristic.evaluateFunc = func(processorIdentifier string, jobname string, values map[string]interface{}) domain.Evaluation {
+			return domain.Evaluation{
+				JobName: jobname,
+				Entries: []domain.EvaluationEntry{
+					{InstanceNumber: 1, Priority: 85},
+				},
+			}
 		}
 
-		err := p.Enforce("test_processor", map[string]interface{}{})
+		err := p.Enforce("test_processor", "test_job", map[string]interface{}{})
 		assert.NoError(t, err)
 		assert.False(t, mockAlert.notified)
 		assert.True(t, mockRoute.notified)

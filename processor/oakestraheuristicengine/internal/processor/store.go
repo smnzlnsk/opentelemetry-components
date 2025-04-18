@@ -3,25 +3,27 @@ package processor
 import (
 	"fmt"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
-// store implements interfaces.TreeStore
+// store implements domain.ProcessorStore
 type store struct {
-	processors map[string]interfaces.Processor
+	processors map[string]domain.Processor
 }
 
-func NewStore() interfaces.ProcessorStore {
+var _ domain.ProcessorStore = &store{}
+
+func NewStore() domain.ProcessorStore {
 	return &store{
-		processors: make(map[string]interfaces.Processor),
+		processors: make(map[string]domain.Processor),
 	}
 }
 
-func (s *store) Get(identifier string) interfaces.Processor {
+func (s *store) Get(identifier string) domain.Processor {
 	return s.processors[identifier]
 }
 
-func (s *store) Add(processor interfaces.Processor) error {
+func (s *store) Add(processor domain.Processor) error {
 	if _, ok := s.processors[processor.Identifier()]; ok {
 		return fmt.Errorf("processor with identifier %s already exists", processor.Identifier())
 	}
@@ -29,6 +31,6 @@ func (s *store) Add(processor interfaces.Processor) error {
 	return nil
 }
 
-func (s *store) GetAll() map[string]interfaces.Processor {
+func (s *store) GetAll() map[string]domain.Processor {
 	return s.processors
 }

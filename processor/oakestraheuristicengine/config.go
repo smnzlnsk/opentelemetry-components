@@ -3,6 +3,7 @@ package oakestraheuristicengine
 import (
 	"errors"
 
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/config"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap"
 )
@@ -10,31 +11,15 @@ import (
 const (
 	notificationInterfaceKey = "interfaces"
 	httpServerKey            = "http_server"
+	mongodbKey               = "mongodb"
 )
-
-// HTTPServerConfig defines the configuration for the HTTP server
-type HTTPServerConfig struct {
-	Enabled bool   `mapstructure:"enabled"`
-	Port    int    `mapstructure:"port"`
-	Host    string `mapstructure:"host"`
-}
-
-type InterfacesConfig struct {
-	Alert    InterfaceConfig `mapstructure:"alert"`
-	Route    InterfaceConfig `mapstructure:"route"`
-	Schedule InterfaceConfig `mapstructure:"schedule"`
-}
-
-type InterfaceConfig struct {
-	Port int    `mapstructure:"port"`
-	Host string `mapstructure:"host"`
-}
 
 // Config defines the configuration for the oakestraheuristicengine processor.
 type Config struct {
 	// Add your configuration fields here
-	HTTPServer             HTTPServerConfig `mapstructure:"http_server"`
-	NotificationInterfaces InterfacesConfig `mapstructure:"interfaces"`
+	HTTPServer             config.HTTPServerConfig `mapstructure:"http_server"`
+	NotificationInterfaces config.InterfacesConfig `mapstructure:"interfaces"`
+	MongoDB                config.MongoDBConfig    `mapstructure:"mongodb"`
 }
 
 var _ component.Config = (*Config)(nil)
@@ -56,6 +41,14 @@ func (cfg *Config) Validate() error {
 			// Default to all interfaces if not specified
 			cfg.HTTPServer.Host = "0.0.0.0"
 		}
+	}
+
+	if cfg.MongoDB.Host == "" {
+		return errors.New("mongodb.host is required")
+	}
+
+	if cfg.MongoDB.Port <= 0 || cfg.MongoDB.Port > 65535 {
+		return errors.New("mongodb.port must be between 1 and 65535")
 	}
 
 	return nil

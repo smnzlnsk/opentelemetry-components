@@ -3,19 +3,19 @@ package wpt
 import (
 	"testing"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
 func TestBuilder(t *testing.T) {
 	tests := []struct {
 		name     string
-		build    func() interfaces.Evaluator
+		build    func() domain.Evaluator
 		params   map[string]interface{}
 		expected float64
 	}{
 		{
 			name: "single node",
-			build: func() interfaces.Evaluator {
+			build: func() domain.Evaluator {
 				return NewBuilder("x > 5", 2.0, 0.5).BuildTree("test", 1.0)
 			},
 			params: map[string]interface{}{
@@ -25,7 +25,7 @@ func TestBuilder(t *testing.T) {
 		},
 		{
 			name: "simple tree with comparison",
-			build: func() interfaces.Evaluator {
+			build: func() domain.Evaluator {
 				builder := NewBuilder("x > y", 2.0, 0.5)
 				builder.Left("z == true", 3.0, 0.3)
 				builder.Right("z == false", 4.0, 0.4)
@@ -40,7 +40,7 @@ func TestBuilder(t *testing.T) {
 		},
 		{
 			name: "complex tree with boolean weights",
-			build: func() interfaces.Evaluator {
+			build: func() domain.Evaluator {
 				builder := NewBuilder("x > 0 && y < 10", 2.0, 0.5)
 				leftNode := builder.Left("z == false", 3.0, 0.3)
 				leftNode.Left("a == true", 4.0, 0.4)

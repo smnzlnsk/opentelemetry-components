@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
 type AlertConfig struct {
@@ -17,13 +15,13 @@ type AlertConfig struct {
 	Endpoint  string  `mapstructure:"endpoint"`
 }
 
-var _ interfaces.NotificationInterface = (*alertNotifier)(nil)
+var _ domain.NotificationInterface = (*alertNotifier)(nil)
 
 type alertNotifier struct {
 	host       string
 	port       int
 	endpoint   string
-	capability types.NotificationInterfaceCapability
+	capability domain.NotificationInterfaceCapability
 }
 
 func (a *alertNotifier) Notify() error {
@@ -55,6 +53,6 @@ func (a *alertNotifier) Notify() error {
 	return nil
 }
 
-func (a *alertNotifier) Type() types.NotificationInterfaceCapability {
-	return constants.NotificationInterfaceCapability_Alert
+func (a *alertNotifier) Type() domain.NotificationInterfaceCapability {
+	return domain.NotificationInterfaceCapability_Alert
 }

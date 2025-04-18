@@ -4,17 +4,15 @@ import (
 	"fmt"
 
 	"github.com/Knetic/govaluate"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
 // policy implements interfaces.Policy
 type policy struct {
 	name                    string
-	capabilities            []types.NotificationInterfaceCapability
-	notificationInterfaces  map[types.NotificationInterfaceCapability]interfaces.NotificationInterface
-	heuristicEntity         interfaces.HeuristicEntity
+	capabilities            []domain.NotificationInterfaceCapability
+	notificationInterfaces  map[domain.NotificationInterfaceCapability]domain.NotificationInterface
+	heuristicEntity         domain.HeuristicEntity
 	preEvaluationConditions []*govaluate.EvaluableExpression
 	evaluationConditions    []*govaluate.EvaluableExpression
 	alertConditions         []*govaluate.EvaluableExpression
@@ -22,7 +20,7 @@ type policy struct {
 	scheduleConditions      []*govaluate.EvaluableExpression
 }
 
-var _ interfaces.Policy = &policy{}
+var _ domain.Policy = &policy{}
 
 // Check checks if the policy is to be evaluated
 // Returns nil if the policy is to be evaluated, otherwise an error is returned
@@ -69,14 +67,13 @@ func (p *policy) CheckEvaluationCondition(values map[string]interface{}) error {
 }
 
 func (p *policy) CheckNotificationConditions(values map[string]interface{}) error {
-
 	for _, condition := range p.alertConditions {
 		result, err := condition.Evaluate(values)
 		if err != nil {
 			return err
 		}
 		if result == true {
-			return p.NotificationInterface(constants.NotificationInterfaceCapability_Alert).Notify()
+			return p.NotificationInterface(domain.NotificationInterfaceCapability_Alert).Notify()
 		}
 	}
 
@@ -86,7 +83,7 @@ func (p *policy) CheckNotificationConditions(values map[string]interface{}) erro
 			return err
 		}
 		if result == true {
-			return p.NotificationInterface(constants.NotificationInterfaceCapability_Route).Notify()
+			return p.NotificationInterface(domain.NotificationInterfaceCapability_Route).Notify()
 		}
 	}
 
@@ -96,18 +93,18 @@ func (p *policy) CheckNotificationConditions(values map[string]interface{}) erro
 			return err
 		}
 		if result == true {
-			return p.NotificationInterface(constants.NotificationInterfaceCapability_Schedule).Notify()
+			return p.NotificationInterface(domain.NotificationInterfaceCapability_Schedule).Notify()
 		}
 	}
 	return nil
 }
-func (p *policy) Enforce(processorIdentifier string, values map[string]interface{}) error {
-	result := p.heuristicEntity.Evaluate(processorIdentifier, values)
-	values["result"] = result
+func (p *policy) Enforce(processorIdentifier string, jobname string, values map[string]interface{}) error {
+	result := p.heuristicEntity.Evaluate(processorIdentifier, jobname, values)
+	values["result"] = result.Entries[0].Priority
 	return p.CheckNotificationConditions(values)
 }
 
-func (p *policy) Capabilities() []types.NotificationInterfaceCapability {
+func (p *policy) Capabilities() []domain.NotificationInterfaceCapability {
 	return p.capabilities
 }
 
@@ -115,10 +112,10 @@ func (p *policy) Name() string {
 	return p.name
 }
 
-func (p *policy) HeuristicEngine() interfaces.HeuristicEntity {
+func (p *policy) HeuristicEngine() domain.HeuristicEntity {
 	return p.heuristicEntity
 }
 
-func (p *policy) NotificationInterface(capability types.NotificationInterfaceCapability) interfaces.NotificationInterface {
+func (p *policy) NotificationInterface(capability domain.NotificationInterfaceCapability) domain.NotificationInterface {
 	return p.notificationInterfaces[capability]
 }

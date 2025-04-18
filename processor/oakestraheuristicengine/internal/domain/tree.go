@@ -1,4 +1,4 @@
-package interfaces
+package domain
 
 type TreeBuilder interface {
 	Left(decision string, trueWeight, falseWeight float64) TreeBuilder

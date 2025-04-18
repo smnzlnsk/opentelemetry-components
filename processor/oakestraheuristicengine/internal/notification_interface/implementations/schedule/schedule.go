@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
 type ScheduleConfig struct {
@@ -21,10 +20,10 @@ type scheduleNotifier struct {
 	host       string
 	port       int
 	endpoint   string
-	capability types.NotificationInterfaceCapability
+	capability domain.NotificationInterfaceCapability
 }
 
-var _ interfaces.NotificationInterface = (*scheduleNotifier)(nil)
+var _ domain.NotificationInterface = (*scheduleNotifier)(nil)
 
 func (s *scheduleNotifier) Notify() error {
 	jsonData := map[string]interface{}{
@@ -55,6 +54,6 @@ func (s *scheduleNotifier) Notify() error {
 	return nil
 }
 
-func (s *scheduleNotifier) Type() types.NotificationInterfaceCapability {
-	return s.capability
+func (s *scheduleNotifier) Type() domain.NotificationInterfaceCapability {
+	return domain.NotificationInterfaceCapability_Schedule
 }

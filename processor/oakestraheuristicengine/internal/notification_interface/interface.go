@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
 type notificationInterface struct {
-	capability types.NotificationInterfaceCapability
+	capability domain.NotificationInterfaceCapability
 	host       string
 	port       int
 	endpoint   string
@@ -45,6 +45,6 @@ func (n *notificationInterface) Notify() error {
 	return nil
 }
 
-func (n *notificationInterface) Type() types.NotificationInterfaceCapability {
+func (n *notificationInterface) Type() domain.NotificationInterfaceCapability {
 	return n.capability
 }

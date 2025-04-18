@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
 type RouteConfig struct {
@@ -22,10 +20,10 @@ type routeNotifier struct {
 	host       string
 	port       int
 	endpoint   string
-	capability types.NotificationInterfaceCapability
+	capability domain.NotificationInterfaceCapability
 }
 
-var _ interfaces.NotificationInterface = (*routeNotifier)(nil)
+var _ domain.NotificationInterface = (*routeNotifier)(nil)
 
 func (r *routeNotifier) Notify() error {
 	jsonData := map[string]interface{}{
@@ -56,6 +54,6 @@ func (r *routeNotifier) Notify() error {
 	return nil
 }
 
-func (r *routeNotifier) Type() types.NotificationInterfaceCapability {
-	return constants.NotificationInterfaceCapability_Route
+func (r *routeNotifier) Type() domain.NotificationInterfaceCapability {
+	return domain.NotificationInterfaceCapability_Route
 }

@@ -1,10 +1,6 @@
 package route
 
-import (
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
-)
+import "github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 
 type routeNotifierBuilder struct {
 	host     string
@@ -12,34 +8,34 @@ type routeNotifierBuilder struct {
 	endpoint string
 }
 
-func NewRouteNotifierBuilder() interfaces.NotificationInterfaceBuilder {
+func NewRouteNotifierBuilder() domain.NotificationInterfaceBuilder {
 	return &routeNotifierBuilder{}
 }
 
-func (r *routeNotifierBuilder) WithHost(host string) interfaces.NotificationInterfaceBuilder {
+func (r *routeNotifierBuilder) WithHost(host string) domain.NotificationInterfaceBuilder {
 	r.host = host
 	return r
 }
 
-func (r *routeNotifierBuilder) WithPort(port int) interfaces.NotificationInterfaceBuilder {
+func (r *routeNotifierBuilder) WithPort(port int) domain.NotificationInterfaceBuilder {
 	r.port = port
 	return r
 }
 
-func (r *routeNotifierBuilder) WithEndpoint(endpoint string) interfaces.NotificationInterfaceBuilder {
+func (r *routeNotifierBuilder) WithEndpoint(endpoint string) domain.NotificationInterfaceBuilder {
 	r.endpoint = endpoint
 	return r
 }
 
-func (r *routeNotifierBuilder) WithCapability(capability types.NotificationInterfaceCapability) interfaces.NotificationInterfaceBuilder {
+func (r *routeNotifierBuilder) WithCapability(capability domain.NotificationInterfaceCapability) domain.NotificationInterfaceBuilder {
 	return r
 }
 
-func (r *routeNotifierBuilder) Build() interfaces.NotificationInterface {
+func (r *routeNotifierBuilder) Build() domain.NotificationInterface {
 	return &routeNotifier{
 		host:       r.host,
 		port:       r.port,
 		endpoint:   r.endpoint,
-		capability: constants.NotificationInterfaceCapability_Route,
+		capability: domain.NotificationInterfaceCapability_Route,
 	}
 }

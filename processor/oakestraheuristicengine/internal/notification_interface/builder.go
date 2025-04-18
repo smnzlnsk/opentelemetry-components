@@ -1,42 +1,41 @@
 package notification_interface
 
 import (
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
 type notificationInterfaceBuilder struct {
-	capability types.NotificationInterfaceCapability
+	capability domain.NotificationInterfaceCapability
 	host       string
 	port       int
 	endpoint   string
 }
 
-func NewNotificationInterfaceBuilder() interfaces.NotificationInterfaceBuilder {
+func NewNotificationInterfaceBuilder() domain.NotificationInterfaceBuilder {
 	return &notificationInterfaceBuilder{}
 }
 
-func (b *notificationInterfaceBuilder) WithHost(host string) interfaces.NotificationInterfaceBuilder {
+func (b *notificationInterfaceBuilder) WithHost(host string) domain.NotificationInterfaceBuilder {
 	b.host = host
 	return b
 }
 
-func (b *notificationInterfaceBuilder) WithPort(port int) interfaces.NotificationInterfaceBuilder {
+func (b *notificationInterfaceBuilder) WithPort(port int) domain.NotificationInterfaceBuilder {
 	b.port = port
 	return b
 }
 
-func (b *notificationInterfaceBuilder) WithEndpoint(endpoint string) interfaces.NotificationInterfaceBuilder {
+func (b *notificationInterfaceBuilder) WithEndpoint(endpoint string) domain.NotificationInterfaceBuilder {
 	b.endpoint = endpoint
 	return b
 }
 
-func (b *notificationInterfaceBuilder) WithCapability(capability types.NotificationInterfaceCapability) interfaces.NotificationInterfaceBuilder {
+func (b *notificationInterfaceBuilder) WithCapability(capability domain.NotificationInterfaceCapability) domain.NotificationInterfaceBuilder {
 	b.capability = capability
 	return b
 }
 
-func (b *notificationInterfaceBuilder) Build() interfaces.NotificationInterface {
+func (b *notificationInterfaceBuilder) Build() domain.NotificationInterface {
 	ni := &notificationInterface{
 		capability: b.capability,
 		host:       b.host,
@@ -45,7 +44,7 @@ func (b *notificationInterfaceBuilder) Build() interfaces.NotificationInterface 
 	}
 
 	// reset builder state
-	b.capability = types.NotificationInterfaceCapability_Unknown
+	b.capability = domain.NotificationInterfaceCapability_Unknown
 	b.host = ""
 	b.port = 0
 	b.endpoint = ""

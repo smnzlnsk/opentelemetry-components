@@ -3,8 +3,7 @@ package policy
 import (
 	"testing"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,7 +24,7 @@ func TestPolicyBuilder(t *testing.T) {
 		builder := NewPolicyBuilder()
 		notificationInterfaceBuilder := builder.NotificationInterfaceBuilder()
 
-		mockRouteNotificationInterface := notificationInterfaceBuilder.WithCapability(constants.NotificationInterfaceCapability_Route).Build()
+		mockRouteNotificationInterface := notificationInterfaceBuilder.WithCapability(domain.NotificationInterfaceCapability_Route).Build()
 		mockHeuristicEntity := &mockHeuristicEntity{}
 
 		// When
@@ -41,8 +40,8 @@ func TestPolicyBuilder(t *testing.T) {
 		// Then
 		assert.NotNil(t, policy)
 		assert.Equal(t, "test-policy", policy.Name())
-		assert.Contains(t, policy.Capabilities(), constants.NotificationInterfaceCapability_Route)
-		assert.Equal(t, mockRouteNotificationInterface, policy.NotificationInterface(constants.NotificationInterfaceCapability_Route))
+		assert.Contains(t, policy.Capabilities(), domain.NotificationInterfaceCapability_Route)
+		assert.Equal(t, mockRouteNotificationInterface, policy.NotificationInterface(domain.NotificationInterfaceCapability_Route))
 	})
 
 	t.Run("builder with multiple capabilities creates policy with all capabilities", func(t *testing.T) {
@@ -50,8 +49,8 @@ func TestPolicyBuilder(t *testing.T) {
 		builder := NewPolicyBuilder()
 		notificationInterfaceBuilder := builder.NotificationInterfaceBuilder()
 
-		mockRouteNotificationInterface := notificationInterfaceBuilder.WithCapability(constants.NotificationInterfaceCapability_Route).Build()
-		mockAlertNotificationInterface := notificationInterfaceBuilder.WithCapability(constants.NotificationInterfaceCapability_Alert).Build()
+		mockRouteNotificationInterface := notificationInterfaceBuilder.WithCapability(domain.NotificationInterfaceCapability_Route).Build()
+		mockAlertNotificationInterface := notificationInterfaceBuilder.WithCapability(domain.NotificationInterfaceCapability_Alert).Build()
 		mockHeuristicEntity := &mockHeuristicEntity{}
 		// When
 		policy := builder.
@@ -68,10 +67,10 @@ func TestPolicyBuilder(t *testing.T) {
 		// Then
 		assert.NotNil(t, policy)
 		assert.Equal(t, "multi-cap-policy", policy.Name())
-		assert.Contains(t, policy.Capabilities(), constants.NotificationInterfaceCapability_Route)
-		assert.Contains(t, policy.Capabilities(), constants.NotificationInterfaceCapability_Alert)
-		assert.Equal(t, mockRouteNotificationInterface, policy.NotificationInterface(constants.NotificationInterfaceCapability_Route))
-		assert.Equal(t, mockAlertNotificationInterface, policy.NotificationInterface(constants.NotificationInterfaceCapability_Alert))
+		assert.Contains(t, policy.Capabilities(), domain.NotificationInterfaceCapability_Route)
+		assert.Contains(t, policy.Capabilities(), domain.NotificationInterfaceCapability_Alert)
+		assert.Equal(t, mockRouteNotificationInterface, policy.NotificationInterface(domain.NotificationInterfaceCapability_Route))
+		assert.Equal(t, mockAlertNotificationInterface, policy.NotificationInterface(domain.NotificationInterfaceCapability_Alert))
 	})
 
 	t.Run("builder resets internal state after build", func(t *testing.T) {
@@ -79,7 +78,7 @@ func TestPolicyBuilder(t *testing.T) {
 		builder := NewPolicyBuilder()
 		notificationInterfaceBuilder := builder.NotificationInterfaceBuilder()
 
-		mockRouteNotificationInterface := notificationInterfaceBuilder.WithCapability(constants.NotificationInterfaceCapability_Route).Build()
+		mockRouteNotificationInterface := notificationInterfaceBuilder.WithCapability(domain.NotificationInterfaceCapability_Route).Build()
 
 		// When
 		firstPolicy := builder.
@@ -96,7 +95,7 @@ func TestPolicyBuilder(t *testing.T) {
 		// Then
 		assert.NotNil(t, firstPolicy)
 		assert.Equal(t, "first-policy", firstPolicy.Name())
-		assert.Contains(t, firstPolicy.Capabilities(), constants.NotificationInterfaceCapability_Route)
+		assert.Contains(t, firstPolicy.Capabilities(), domain.NotificationInterfaceCapability_Route)
 
 		// expect to be nil, because builder is reset
 		assert.Nil(t, secondPolicy)
@@ -108,8 +107,8 @@ func TestPolicyBuilder(t *testing.T) {
 		notificationInterfaceBuilder := builder.NotificationInterfaceBuilder()
 
 		// When
-		route := notificationInterfaceBuilder.WithCapability(constants.NotificationInterfaceCapability_Route).Build()
-		schedule := notificationInterfaceBuilder.WithCapability(constants.NotificationInterfaceCapability_Schedule).Build()
+		route := notificationInterfaceBuilder.WithCapability(domain.NotificationInterfaceCapability_Route).Build()
+		schedule := notificationInterfaceBuilder.WithCapability(domain.NotificationInterfaceCapability_Schedule).Build()
 
 		policy := builder.
 			WithName("test-policy").
@@ -125,10 +124,10 @@ func TestPolicyBuilder(t *testing.T) {
 		// Then
 		assert.NotNil(t, policy)
 		assert.Equal(t, "test-policy", policy.Name())
-		assert.Contains(t, policy.Capabilities(), constants.NotificationInterfaceCapability_Route)
-		assert.Contains(t, policy.Capabilities(), constants.NotificationInterfaceCapability_Schedule)
-		assert.Equal(t, route, policy.NotificationInterface(constants.NotificationInterfaceCapability_Route))
-		assert.Equal(t, schedule, policy.NotificationInterface(constants.NotificationInterfaceCapability_Schedule))
+		assert.Contains(t, policy.Capabilities(), domain.NotificationInterfaceCapability_Route)
+		assert.Contains(t, policy.Capabilities(), domain.NotificationInterfaceCapability_Schedule)
+		assert.Equal(t, route, policy.NotificationInterface(domain.NotificationInterfaceCapability_Route))
+		assert.Equal(t, schedule, policy.NotificationInterface(domain.NotificationInterfaceCapability_Schedule))
 	})
 
 	t.Run("builder requires pre-evaluation conditions", func(t *testing.T) {
@@ -136,7 +135,7 @@ func TestPolicyBuilder(t *testing.T) {
 		builder := NewPolicyBuilder()
 		notificationInterfaceBuilder := builder.NotificationInterfaceBuilder()
 
-		mockNotificationInterface := notificationInterfaceBuilder.WithCapability(constants.NotificationInterfaceCapability_Route).Build()
+		mockNotificationInterface := notificationInterfaceBuilder.WithCapability(domain.NotificationInterfaceCapability_Route).Build()
 		mockHeuristicEntity := &mockHeuristicEntity{}
 
 		// When
@@ -156,7 +155,7 @@ func TestPolicyBuilder(t *testing.T) {
 		builder := NewPolicyBuilder()
 		notificationInterfaceBuilder := builder.NotificationInterfaceBuilder()
 
-		mockNotificationInterface := notificationInterfaceBuilder.WithCapability(constants.NotificationInterfaceCapability_Route).Build()
+		mockNotificationInterface := notificationInterfaceBuilder.WithCapability(domain.NotificationInterfaceCapability_Route).Build()
 		mockHeuristicEntity := &mockHeuristicEntity{}
 
 		// When
@@ -176,8 +175,8 @@ func TestPolicyBuilder(t *testing.T) {
 		builder := NewPolicyBuilder()
 		notificationInterfaceBuilder := builder.NotificationInterfaceBuilder()
 
-		mockRouteNotificationInterface := notificationInterfaceBuilder.WithCapability(constants.NotificationInterfaceCapability_Route).Build()
-		mockAlertNotificationInterface := notificationInterfaceBuilder.WithCapability(constants.NotificationInterfaceCapability_Alert).Build()
+		mockRouteNotificationInterface := notificationInterfaceBuilder.WithCapability(domain.NotificationInterfaceCapability_Route).Build()
+		mockAlertNotificationInterface := notificationInterfaceBuilder.WithCapability(domain.NotificationInterfaceCapability_Alert).Build()
 		mockHeuristicEntity := &mockHeuristicEntity{}
 
 		// When
@@ -201,8 +200,8 @@ func TestPolicyBuilder(t *testing.T) {
 		builder := NewPolicyBuilder()
 		notificationInterfaceBuilder := builder.NotificationInterfaceBuilder()
 
-		mockRouteNotificationInterface := notificationInterfaceBuilder.WithCapability(constants.NotificationInterfaceCapability_Route).Build()
-		mockAlertNotificationInterface := notificationInterfaceBuilder.WithCapability(constants.NotificationInterfaceCapability_Alert).Build()
+		mockRouteNotificationInterface := notificationInterfaceBuilder.WithCapability(domain.NotificationInterfaceCapability_Route).Build()
+		mockAlertNotificationInterface := notificationInterfaceBuilder.WithCapability(domain.NotificationInterfaceCapability_Alert).Build()
 		mockHeuristicEntity := &mockHeuristicEntity{}
 
 		// When
@@ -220,12 +219,12 @@ func TestPolicyBuilder(t *testing.T) {
 		// Then
 		assert.NotNil(t, policy)
 		assert.Equal(t, "test-policy", policy.Name())
-		assert.Contains(t, policy.Capabilities(), constants.NotificationInterfaceCapability_Route)
-		assert.Contains(t, policy.Capabilities(), constants.NotificationInterfaceCapability_Alert)
+		assert.Contains(t, policy.Capabilities(), domain.NotificationInterfaceCapability_Route)
+		assert.Contains(t, policy.Capabilities(), domain.NotificationInterfaceCapability_Alert)
 	})
 }
 
 // Add mock for HeuristicEntity
 type mockHeuristicEntity struct {
-	interfaces.HeuristicEntity
+	domain.HeuristicEntity
 }

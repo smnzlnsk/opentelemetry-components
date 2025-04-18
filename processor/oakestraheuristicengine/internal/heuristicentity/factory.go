@@ -3,9 +3,7 @@ package heuristicentity
 import (
 	"fmt"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/heuristicentity/entities/routing"
 	"go.uber.org/zap"
 )
@@ -14,13 +12,13 @@ type heuristicEntityFactory struct {
 	logger *zap.Logger
 }
 
-func NewHeuristicEntityFactory(logger *zap.Logger) interfaces.HeuristicEntityFactory {
+func NewHeuristicEntityFactory(logger *zap.Logger) domain.HeuristicEntityFactory {
 	return &heuristicEntityFactory{logger: logger}
 }
 
-func (f *heuristicEntityFactory) CreateHeuristicEntity(heuristicType types.HeuristicType) (interfaces.HeuristicEntity, error) {
+func (f *heuristicEntityFactory) CreateHeuristicEntity(heuristicType domain.HeuristicType) (domain.HeuristicEntity, error) {
 	switch heuristicType {
-	case constants.RoutingEntity:
+	case domain.RoutingEntity:
 		return routing.NewRoutingEntity(f.logger), nil
 	default:
 		return nil, fmt.Errorf("heuristic type %s not found", heuristicType)

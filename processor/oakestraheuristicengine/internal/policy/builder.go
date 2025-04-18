@@ -2,9 +2,7 @@ package policy
 
 import (
 	"github.com/Knetic/govaluate"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/notification_interface"
 )
 
@@ -16,22 +14,22 @@ type policyBuilder struct {
 	alertConditions              []*govaluate.EvaluableExpression
 	routeConditions              []*govaluate.EvaluableExpression
 	scheduleConditions           []*govaluate.EvaluableExpression
-	notificationInterfaceBuilder interfaces.NotificationInterfaceBuilder
-	capabilities                 []types.NotificationInterfaceCapability
-	notificationInterfaces       map[types.NotificationInterfaceCapability]interfaces.NotificationInterface
-	heuristicEntity              interfaces.HeuristicEntity
+	notificationInterfaceBuilder domain.NotificationInterfaceBuilder
+	capabilities                 []domain.NotificationInterfaceCapability
+	notificationInterfaces       map[domain.NotificationInterfaceCapability]domain.NotificationInterface
+	heuristicEntity              domain.HeuristicEntity
 }
 
-var _ interfaces.PolicyBuilder = &policyBuilder{}
+var _ domain.PolicyBuilder = &policyBuilder{}
 
-func NewPolicyBuilder() interfaces.PolicyBuilder {
+func NewPolicyBuilder() domain.PolicyBuilder {
 	return &policyBuilder{
 		notificationInterfaceBuilder: notification_interface.NewNotificationInterfaceBuilder(),
-		notificationInterfaces:       make(map[types.NotificationInterfaceCapability]interfaces.NotificationInterface),
+		notificationInterfaces:       make(map[domain.NotificationInterfaceCapability]domain.NotificationInterface),
 	}
 }
 
-func (b *policyBuilder) WithName(name string) interfaces.PolicyBuilder {
+func (b *policyBuilder) WithName(name string) domain.PolicyBuilder {
 	if b.name != "" {
 		return b
 	}
@@ -39,12 +37,12 @@ func (b *policyBuilder) WithName(name string) interfaces.PolicyBuilder {
 	return b
 }
 
-func (b *policyBuilder) WithHeuristicEngine(engine interfaces.HeuristicEntity) interfaces.PolicyBuilder {
+func (b *policyBuilder) WithHeuristicEngine(engine domain.HeuristicEntity) domain.PolicyBuilder {
 	b.heuristicEntity = engine
 	return b
 }
 
-func (b *policyBuilder) WithPreEvaluationCondition(conditions string) interfaces.PolicyBuilder {
+func (b *policyBuilder) WithPreEvaluationCondition(conditions string) domain.PolicyBuilder {
 	expression, err := govaluate.NewEvaluableExpression(conditions)
 	if err != nil {
 		return b
@@ -53,7 +51,7 @@ func (b *policyBuilder) WithPreEvaluationCondition(conditions string) interfaces
 	return b
 }
 
-func (b *policyBuilder) WithEvaluationCondition(condition string) interfaces.PolicyBuilder {
+func (b *policyBuilder) WithEvaluationCondition(condition string) domain.PolicyBuilder {
 	expression, err := govaluate.NewEvaluableExpression(condition)
 	if err != nil {
 		return b
@@ -62,19 +60,19 @@ func (b *policyBuilder) WithEvaluationCondition(condition string) interfaces.Pol
 	return b
 }
 
-func (b *policyBuilder) WithRoute(measure interfaces.NotificationInterface) interfaces.PolicyBuilder {
-	if b.notificationInterfaces[constants.NotificationInterfaceCapability_Route] != nil {
+func (b *policyBuilder) WithRoute(measure domain.NotificationInterface) domain.PolicyBuilder {
+	if b.notificationInterfaces[domain.NotificationInterfaceCapability_Route] != nil {
 		return b
 	}
-	if measure.Type() != constants.NotificationInterfaceCapability_Route {
+	if measure.Type() != domain.NotificationInterfaceCapability_Route {
 		return b
 	}
-	b.capabilities = append(b.capabilities, constants.NotificationInterfaceCapability_Route)
-	b.notificationInterfaces[constants.NotificationInterfaceCapability_Route] = measure
+	b.capabilities = append(b.capabilities, domain.NotificationInterfaceCapability_Route)
+	b.notificationInterfaces[domain.NotificationInterfaceCapability_Route] = measure
 	return b
 }
 
-func (b *policyBuilder) WithRouteCondition(condition string) interfaces.PolicyBuilder {
+func (b *policyBuilder) WithRouteCondition(condition string) domain.PolicyBuilder {
 	expression, err := govaluate.NewEvaluableExpression(condition)
 	if err != nil {
 		return b
@@ -83,19 +81,19 @@ func (b *policyBuilder) WithRouteCondition(condition string) interfaces.PolicyBu
 	return b
 }
 
-func (b *policyBuilder) WithAlert(measure interfaces.NotificationInterface) interfaces.PolicyBuilder {
-	if b.notificationInterfaces[constants.NotificationInterfaceCapability_Alert] != nil {
+func (b *policyBuilder) WithAlert(measure domain.NotificationInterface) domain.PolicyBuilder {
+	if b.notificationInterfaces[domain.NotificationInterfaceCapability_Alert] != nil {
 		return b
 	}
-	if measure.Type() != constants.NotificationInterfaceCapability_Alert {
+	if measure.Type() != domain.NotificationInterfaceCapability_Alert {
 		return b
 	}
-	b.capabilities = append(b.capabilities, constants.NotificationInterfaceCapability_Alert)
-	b.notificationInterfaces[constants.NotificationInterfaceCapability_Alert] = measure
+	b.capabilities = append(b.capabilities, domain.NotificationInterfaceCapability_Alert)
+	b.notificationInterfaces[domain.NotificationInterfaceCapability_Alert] = measure
 	return b
 }
 
-func (b *policyBuilder) WithAlertCondition(condition string) interfaces.PolicyBuilder {
+func (b *policyBuilder) WithAlertCondition(condition string) domain.PolicyBuilder {
 	expression, err := govaluate.NewEvaluableExpression(condition)
 	if err != nil {
 		return b
@@ -104,19 +102,19 @@ func (b *policyBuilder) WithAlertCondition(condition string) interfaces.PolicyBu
 	return b
 }
 
-func (b *policyBuilder) WithSchedule(measure interfaces.NotificationInterface) interfaces.PolicyBuilder {
-	if b.notificationInterfaces[constants.NotificationInterfaceCapability_Schedule] != nil {
+func (b *policyBuilder) WithSchedule(measure domain.NotificationInterface) domain.PolicyBuilder {
+	if b.notificationInterfaces[domain.NotificationInterfaceCapability_Schedule] != nil {
 		return b
 	}
-	if measure.Type() != constants.NotificationInterfaceCapability_Schedule {
+	if measure.Type() != domain.NotificationInterfaceCapability_Schedule {
 		return b
 	}
-	b.capabilities = append(b.capabilities, constants.NotificationInterfaceCapability_Schedule)
-	b.notificationInterfaces[constants.NotificationInterfaceCapability_Schedule] = measure
+	b.capabilities = append(b.capabilities, domain.NotificationInterfaceCapability_Schedule)
+	b.notificationInterfaces[domain.NotificationInterfaceCapability_Schedule] = measure
 	return b
 }
 
-func (b *policyBuilder) WithScheduleCondition(condition string) interfaces.PolicyBuilder {
+func (b *policyBuilder) WithScheduleCondition(condition string) domain.PolicyBuilder {
 	expression, err := govaluate.NewEvaluableExpression(condition)
 	if err != nil {
 		return b
@@ -125,12 +123,12 @@ func (b *policyBuilder) WithScheduleCondition(condition string) interfaces.Polic
 	return b
 }
 
-func (b *policyBuilder) WithHeuristicEntity(entity interfaces.HeuristicEntity) interfaces.PolicyBuilder {
+func (b *policyBuilder) WithHeuristicEntity(entity domain.HeuristicEntity) domain.PolicyBuilder {
 	b.heuristicEntity = entity
 	return b
 }
 
-func (b *policyBuilder) Build() interfaces.Policy {
+func (b *policyBuilder) Build() domain.Policy {
 	if b.name == "" {
 		return nil
 	}
@@ -156,19 +154,19 @@ func (b *policyBuilder) Build() interfaces.Policy {
 	}
 
 	// verify, if notification interfaces are set, then at least one condition is set
-	if _, ok := b.notificationInterfaces[constants.NotificationInterfaceCapability_Alert]; ok {
+	if _, ok := b.notificationInterfaces[domain.NotificationInterfaceCapability_Alert]; ok {
 		if len(b.alertConditions) == 0 {
 			return nil
 		}
 	}
 
-	if _, ok := b.notificationInterfaces[constants.NotificationInterfaceCapability_Route]; ok {
+	if _, ok := b.notificationInterfaces[domain.NotificationInterfaceCapability_Route]; ok {
 		if len(b.routeConditions) == 0 {
 			return nil
 		}
 	}
 
-	if _, ok := b.notificationInterfaces[constants.NotificationInterfaceCapability_Schedule]; ok {
+	if _, ok := b.notificationInterfaces[domain.NotificationInterfaceCapability_Schedule]; ok {
 		if len(b.scheduleConditions) == 0 {
 			return nil
 		}
@@ -189,7 +187,7 @@ func (b *policyBuilder) Build() interfaces.Policy {
 	// Reset internal state
 	b.name = ""
 	b.capabilities = nil
-	b.notificationInterfaces = make(map[types.NotificationInterfaceCapability]interfaces.NotificationInterface)
+	b.notificationInterfaces = make(map[domain.NotificationInterfaceCapability]domain.NotificationInterface)
 	b.heuristicEntity = nil
 	b.preEvaluationConditions = nil
 	b.evaluationConditions = nil
@@ -200,6 +198,6 @@ func (b *policyBuilder) Build() interfaces.Policy {
 	return policy
 }
 
-func (b *policyBuilder) NotificationInterfaceBuilder() interfaces.NotificationInterfaceBuilder {
+func (b *policyBuilder) NotificationInterfaceBuilder() domain.NotificationInterfaceBuilder {
 	return b.notificationInterfaceBuilder
 }

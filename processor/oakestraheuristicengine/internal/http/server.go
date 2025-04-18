@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"go.uber.org/zap"
 )
 
-// Server represents the HTTP server for tablequery
+// Server represents the HTTP server for policy evaluation
 type Server struct {
 	host   string
 	port   int
@@ -19,10 +20,10 @@ type Server struct {
 	logger *zap.Logger
 
 	// policies
-	policies map[string]interfaces.Policy
+	policies map[string]domain.Policy
 
 	// metric store
-	metricStore interfaces.MetricStore
+	metricStore domain.MetricStore
 
 	// HTTP server instance
 	server *http.Server
@@ -34,8 +35,8 @@ type ServerConfig struct {
 	Port int
 }
 
-// NewServer creates a new tablequery HTTP server
-func NewServer(config ServerConfig, logger *zap.Logger, policies map[string]interfaces.Policy, metricStore interfaces.MetricStore) *Server {
+// NewServer creates a new policy evaluation HTTP server
+func NewServer(config ServerConfig, logger *zap.Logger, policies map[string]domain.Policy, metricStore domain.MetricStore) *Server {
 	return &Server{
 		host:        config.Host,
 		port:        config.Port,
@@ -72,11 +73,29 @@ func (s *Server) Start() error {
 // Shutdown gracefully shuts down the HTTP server
 func (s *Server) Shutdown(ctx context.Context) error {
 	if s.server == nil {
+		s.logger.Info("HTTP server was nil, nothing to shut down")
 		return nil
 	}
 
-	s.logger.Info("Shutting down HTTP server")
-	return s.server.Shutdown(ctx)
+	s.logger.Info("Shutting down HTTP server", zap.String("address", s.server.Addr))
+
+	// Create a context with timeout to ensure we don't hang forever
+	shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	err := s.server.Shutdown(shutdownCtx)
+	if err != nil {
+		if err == context.DeadlineExceeded {
+			s.logger.Warn("HTTP server shutdown timed out, forcing close", zap.Error(err))
+			// Force close if timeout occurs
+			return s.server.Close()
+		}
+		s.logger.Error("Error during HTTP server shutdown", zap.Error(err))
+		return err
+	}
+
+	s.logger.Info("HTTP server shutdown completed successfully")
+	return nil
 }
 
 // setupRoutes configures the HTTP routes
@@ -84,9 +103,22 @@ func (s *Server) setupRoutes() {
 	s.router.HandleFunc("/policy/", s.handlePolicy)
 }
 
-// handleTableQuery processes requests to the /tablequery/<routingPolicy> endpoint
+// handlePolicy processes requests to the /policy/<policyName>/<processorName> endpoint
 func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
-	var success bool
+	// Parse appName from request body
+
+	var requestBody domain.Job
+
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			http.Error(w, "Failed to parse request body: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
+	jobName := requestBody.JobName
+	instances := requestBody.ServiceInstanceList
+
 	// Extract the routing policy from the URL path
 	path := strings.TrimPrefix(r.URL.Path, "/policy/")
 	if path == "" {
@@ -109,43 +141,52 @@ func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 
 	// Process the request based on the routing policy
 
-	// get the policy from the policy store
+	// Get the policy from the policy store
 	policy, ok := s.policies[policyName]
 	if !ok {
 		http.Error(w, "Policy not found", http.StatusNotFound)
 		return
 	}
 
-	// get the processor from the policy
+	// Get the processor from the policy
 	values := s.metricStore.GetValueMapByString()
+	fmt.Println("values", values)
 	processors := policy.HeuristicEngine().Processors()
 
 	// Check if a specific processor was requested
-	var processorResult float64
+	var processor domain.Processor
+	var exists bool
+
 	if processorName != "" {
-		processor, exists := processors[processorName]
+		// Check if specified processor exists
+		processor, exists = processors[processorName]
 		if !exists {
 			http.Error(w, fmt.Sprintf("Processor '%s' not found", processorName), http.StatusNotFound)
 			return
 		}
-		processorResult = processor.Evaluator().Evaluate(1, values)
-		success = true
 	} else {
 		// Default to "routing" processor if none specified
-		if routingProcessor, exists := processors["default"]; exists {
-			processorResult = routingProcessor.Evaluator().Evaluate(1, values)
-			success = true
-		} else {
+		processor, exists = processors["default"]
+		if !exists {
 			http.Error(w, "Processor not found", http.StatusNotFound)
 			return
 		}
 	}
 
+	for i := range instances {
+		instances[i].Priority = processor.Evaluator().Evaluate(1, values) // TODO: incorporate job name for evaluation
+	}
+
+	err := policy.Enforce(processorName, jobName, values)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	response := map[string]interface{}{
-		"status":    map[bool]string{true: "success", false: "failed"}[success],
 		"policy":    policy.Name(),
 		"processor": processorName,
-		"result":    processorResult,
+		"result":    instances,
 	}
 
 	// Return JSON response
@@ -155,15 +196,3 @@ func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
-
-// Example usage:
-// func main() {
-//     config := ServerConfig{
-//         Host: "0.0.0.0",
-//         Port: 8080,
-//     }
-//     server := NewServer(config)
-//     if err := server.Start(); err != nil {
-//         log.Fatalf("Failed to start server: %v", err)
-//     }
-// }

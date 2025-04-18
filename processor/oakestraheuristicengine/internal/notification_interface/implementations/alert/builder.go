@@ -1,10 +1,6 @@
 package alert
 
-import (
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/constants"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/interfaces"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/common/types"
-)
+import "github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 
 type alertNotifierBuilder struct {
 	host     string
@@ -12,34 +8,34 @@ type alertNotifierBuilder struct {
 	endpoint string
 }
 
-func NewAlertNotifierBuilder() interfaces.NotificationInterfaceBuilder {
+func NewAlertNotifierBuilder() domain.NotificationInterfaceBuilder {
 	return &alertNotifierBuilder{}
 }
 
-func (b *alertNotifierBuilder) WithHost(host string) interfaces.NotificationInterfaceBuilder {
+func (b *alertNotifierBuilder) WithHost(host string) domain.NotificationInterfaceBuilder {
 	b.host = host
 	return b
 }
 
-func (b *alertNotifierBuilder) WithPort(port int) interfaces.NotificationInterfaceBuilder {
+func (b *alertNotifierBuilder) WithPort(port int) domain.NotificationInterfaceBuilder {
 	b.port = port
 	return b
 }
 
-func (b *alertNotifierBuilder) WithEndpoint(endpoint string) interfaces.NotificationInterfaceBuilder {
+func (b *alertNotifierBuilder) WithEndpoint(endpoint string) domain.NotificationInterfaceBuilder {
 	b.endpoint = endpoint
 	return b
 }
 
-func (b *alertNotifierBuilder) WithCapability(capability types.NotificationInterfaceCapability) interfaces.NotificationInterfaceBuilder {
+func (b *alertNotifierBuilder) WithCapability(capability domain.NotificationInterfaceCapability) domain.NotificationInterfaceBuilder {
 	return b
 }
 
-func (b *alertNotifierBuilder) Build() interfaces.NotificationInterface {
+func (b *alertNotifierBuilder) Build() domain.NotificationInterface {
 	return &alertNotifier{
 		host:       b.host,
 		port:       b.port,
 		endpoint:   b.endpoint,
-		capability: constants.NotificationInterfaceCapability_Alert,
+		capability: domain.NotificationInterfaceCapability_Alert,
 	}
 }
