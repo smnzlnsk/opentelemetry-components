@@ -1,32 +1,32 @@
 package applicationprocessor
 
 import (
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/domain"
 )
 
 // FormulaToMetricMap is a map of service assigned formula to metric name
 type FormulaToMetricMap struct {
-	mapping map[FormulaKey]internal.MetricMetadata
+	mapping map[FormulaKey]domain.MetricMetadata
 }
 
 // NewFormulaToMetricMap creates a new FormulaToMetricMap
 func NewFormulaToMetricMap() *FormulaToMetricMap {
 	return &FormulaToMetricMap{
-		mapping: make(map[FormulaKey]internal.MetricMetadata),
+		mapping: make(map[FormulaKey]domain.MetricMetadata),
 	}
 }
 
-func (ftmp *FormulaToMetricMap) GetMetricName(service string, formula string) internal.MetricMetadata {
+func (ftmp *FormulaToMetricMap) GetMetricName(service string, formula string) domain.MetricMetadata {
 	key := FormulaKey{Service: service, Formula: formula}
 	if metadata, exists := ftmp.mapping[key]; exists {
 		return metadata
 	}
-	return internal.MetricMetadata{}
+	return domain.MetricMetadata{}
 }
 
 func (ftmp *FormulaToMetricMap) AddMetric(service string, formula string, metricName string, metricUnit string) {
 	key := FormulaKey{Service: service, Formula: formula}
-	ftmp.mapping[key] = internal.MetricMetadata{
+	ftmp.mapping[key] = domain.MetricMetadata{
 		MetricName: metricName,
 		MetricUnit: metricUnit,
 	}

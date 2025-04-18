@@ -6,6 +6,9 @@ import (
 
 	pb "github.com/smnzlnsk/monitoring-proto-lib/gen/go/monitoring_proto_lib/monitoring/v1"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/persistence/mongodb"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/repository"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/service"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -16,24 +19,39 @@ import (
 var _ processor.Metrics = (*MultiProcessor)(nil)
 
 type MultiProcessor struct {
-	processors []internal.MetricProcessor
-	next       consumer.Metrics
-	logger     *zap.Logger
-	cancel     context.CancelFunc
-	grpcServer Server
+	processors    []internal.MetricProcessor
+	next          consumer.Metrics
+	logger        *zap.Logger
+	cancel        context.CancelFunc
+	grpcServer    Server
+	mongodbClient *mongodb.Client
+	config        *Config
+	services      *service.Services
 }
 
 func newMultiProcessor(ctx context.Context, set processor.Settings, cfg *Config, next consumer.Metrics) *MultiProcessor {
-	p, err := createProcessors(ctx, set, cfg, processorFactories)
+	dbClient, err := mongodb.NewClient(&cfg.MongoDB, set.Logger)
+	if err != nil {
+		set.Logger.Error(err.Error())
+		return nil
+	}
+	repositories := repository.NewRepositories(dbClient, set.Logger)
+
+	services := service.NewServices(repositories, set.Logger)
+
+	p, err := createProcessors(ctx, set, cfg, processorFactories, services)
 	if err != nil {
 		set.Logger.Error(err.Error())
 		return nil
 	}
 
 	proc := &MultiProcessor{
-		processors: p,
-		next:       next,
-		logger:     set.Logger,
+		processors:    p,
+		next:          next,
+		logger:        set.Logger,
+		config:        cfg,
+		services:      services,
+		mongodbClient: dbClient,
 	}
 
 	// Initialize gRPC server
@@ -47,12 +65,13 @@ func createProcessors(
 	set processor.Settings,
 	config *Config,
 	factories map[string]internal.ProcessorFactory,
+	services *service.Services,
 ) ([]internal.MetricProcessor, error) {
 
 	processors := make([]internal.MetricProcessor, 0, len(config.Processors))
 
 	for key, cfg := range config.Processors {
-		metricsProcessor, err := createProcessor(ctx, set, cfg, key, factories)
+		metricsProcessor, err := createProcessor(ctx, set, cfg, key, factories, services)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create metrics processor for key: %q: %w", key, err)
 		}
@@ -67,12 +86,13 @@ func createProcessor(
 	cfg internal.Config,
 	key string,
 	factories map[string]internal.ProcessorFactory,
+	services *service.Services,
 ) (internal.MetricProcessor, error) {
 	factory := factories[key]
 	if factory == nil {
 		return nil, fmt.Errorf("unknown processor: %s", key)
 	}
-	p, err := factory.CreateMetricsProcessor(ctx, set, cfg)
+	p, err := factory.CreateMetricsProcessor(ctx, set, cfg, services)
 	if err != nil {
 		return nil, err
 	}
@@ -112,6 +132,14 @@ func (p *MultiProcessor) Shutdown(ctx context.Context) error {
 			return err
 		}
 	}
+
+	// Close MongoDB client
+	if p.mongodbClient != nil {
+		if err := p.mongodbClient.Close(ctx); err != nil {
+			return fmt.Errorf("failed to close MongoDB client: %w", err)
+		}
+	}
+
 	if p.cancel != nil {
 		p.cancel()
 	}

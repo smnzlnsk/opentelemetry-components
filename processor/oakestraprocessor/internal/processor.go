@@ -4,6 +4,7 @@ import (
 	"context"
 
 	pb "github.com/smnzlnsk/monitoring-proto-lib/gen/go/monitoring_proto_lib/monitoring/v1"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/service"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/processor"
@@ -14,7 +15,8 @@ type ProcessorFactory interface {
 	CreateMetricsProcessor(
 		ctx context.Context,
 		settings processor.Settings,
-		cfg Config) (MetricProcessor, error)
+		cfg Config,
+		services *service.Services) (MetricProcessor, error)
 }
 
 type MetricProcessor interface {

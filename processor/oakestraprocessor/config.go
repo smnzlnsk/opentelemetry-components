@@ -3,6 +3,8 @@ package oakestraprocessor // import github.com/smnzlnsk/opentelemetry-components
 import (
 	"errors"
 	"fmt"
+
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/config"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap"
@@ -10,6 +12,7 @@ import (
 
 const (
 	processorKey = "subprocessors"
+	mongodbKey   = "mongodb"
 )
 
 var (
@@ -21,7 +24,8 @@ var (
 // Config represents the processor config settings within the collector's config.yaml
 type Config struct {
 	Processors map[string]internal.Config `mapstructure:"-"`
-	GRPCPort   int                       `mapstructure:"grpc_port"`
+	GRPCPort   int                        `mapstructure:"grpc_port"`
+	MongoDB    config.MongoDBConfig       `mapstructure:"mongodb"`
 }
 
 // Validate checks if the processor configuration is valid
@@ -29,6 +33,15 @@ func (cfg *Config) Validate() error {
 	if len(cfg.Processors) == 0 {
 		return errors.New("must provide at least one subprocessor")
 	}
+
+	if cfg.MongoDB.Host == "" {
+		return errors.New("mongodb.host is required")
+	}
+
+	if cfg.MongoDB.Port <= 0 || cfg.MongoDB.Port > 65535 {
+		return errors.New("mongodb.port must be between 1 and 65535")
+	}
+
 	return nil
 }
 

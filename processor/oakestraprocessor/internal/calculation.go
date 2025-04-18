@@ -9,36 +9,52 @@ import (
 
 	"github.com/Knetic/govaluate"
 	pb "github.com/smnzlnsk/monitoring-proto-lib/gen/go/monitoring_proto_lib/monitoring/v1"
-	"go.opentelemetry.io/collector/pdata/pcommon"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/domain"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 )
 
-type ContractKey struct {
-	Service string
-	Formula string
-}
-
-type DatapointKey struct {
-	Service string // empty for system metrics
-	Metric  string
-	State   string
+// Define workItem for the evaluation process
+type workItem struct {
+	service     string
+	contractKey domain.ContractKey
 }
 
 type ContractState struct {
 	sync.RWMutex
-	Contracts           map[ContractKey]CalculationContract
+	once                sync.Once
+	Contracts           map[domain.ContractKey]domain.CalculationContract
 	Filters             *Filter
-	Datapoints          map[DatapointKey]MetricDatapoint
-	compiledExpressions map[ContractKey]*govaluate.EvaluableExpression
+	Datapoints          map[domain.DatapointKey]domain.MetricDatapoint
+	compiledExpressions map[domain.ContractKey]*govaluate.EvaluableExpression
 }
 
 func NewContractState() *ContractState {
 	return &ContractState{
-		Contracts:           make(map[ContractKey]CalculationContract),
+		Contracts:           make(map[domain.ContractKey]domain.CalculationContract),
 		Filters:             newFilter(),
-		Datapoints:          make(map[DatapointKey]MetricDatapoint),
-		compiledExpressions: make(map[ContractKey]*govaluate.EvaluableExpression),
+		Datapoints:          make(map[domain.DatapointKey]domain.MetricDatapoint),
+		compiledExpressions: make(map[domain.ContractKey]*govaluate.EvaluableExpression),
 	}
+}
+
+func (c *ContractState) Sync() {
+	c.once.Do(func() {
+		// We'll leave it as a placeholder for now since we don't have the implementation
+		// TODO: Implement contract population logic if needed
+	})
+}
+
+func (c *ContractState) GetDefaultContracts() map[string]domain.CalculationContract {
+	c.RLock()
+	defer c.RUnlock()
+
+	res := make(map[string]domain.CalculationContract)
+	for key, contract := range c.Contracts {
+		if key.Service == "default" {
+			res[key.Formula] = contract
+		}
+	}
+	return res
 }
 
 func (c *ContractState) GenerateDefaultContract(formula string, states map[string]bool) error {
@@ -47,12 +63,12 @@ func (c *ContractState) GenerateDefaultContract(formula string, states map[strin
 		return fmt.Errorf("invalid formula %s: %w", formula, err)
 	}
 
-	key := ContractKey{
+	key := domain.ContractKey{
 		Service: "default",
 		Formula: formula,
 	}
 
-	contract := CalculationContract{
+	contract := domain.CalculationContract{
 		Formula: formula,
 		Service: "default",
 		States:  states,
@@ -65,7 +81,7 @@ func (c *ContractState) GenerateDefaultContract(formula string, states map[strin
 	return nil
 }
 
-func (c *ContractState) RegisterService(service string, contracts map[string]CalculationContract, normalizationValue string) error {
+func (c *ContractState) RegisterService(service string, contracts map[string]domain.CalculationContract, normalizationValue string) error {
 	c.Lock()
 	defer c.Unlock()
 
@@ -93,7 +109,7 @@ func (c *ContractState) RegisterService(service string, contracts map[string]Cal
 	// First register default contracts for this service
 	for key, contract := range c.Contracts {
 		if key.Service == "default" {
-			serviceKey := ContractKey{
+			serviceKey := domain.ContractKey{
 				Service: service,
 				Formula: key.Formula,
 			}
@@ -120,14 +136,14 @@ func (c *ContractState) RegisterService(service string, contracts map[string]Cal
 	}
 
 	// Then register service-specific contracts
-	for formula, contract := range contracts {
-		key := ContractKey{Service: service, Formula: formula}
+	for _, contract := range contracts {
+		key := domain.ContractKey{Service: service, Formula: contract.Formula}
 
-		normalisedFormula := fmt.Sprintf("(%s) / %f", formula, normValue)
+		normalisedFormula := fmt.Sprintf("(%s) / %f", contract.Formula, normValue)
 		fmt.Printf("normalisedFormula: %s\n", normalisedFormula)
 		expr, err := govaluate.NewEvaluableExpression(normalisedFormula)
 		if err != nil {
-			return fmt.Errorf("invalid formula %s: %w", formula, err)
+			return fmt.Errorf("invalid formula %s: %w", contract.Formula, err)
 		}
 
 		c.Contracts[key] = contract
@@ -243,6 +259,7 @@ func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
 					continue
 				}
 
+				// Check if metric is registered
 				metricFilter, ok := c.Filters.MetricFilters[mmetric.Name()]
 				if !ok {
 					continue
@@ -269,7 +286,7 @@ func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
 						}
 					}
 
-					key := DatapointKey{
+					key := domain.DatapointKey{
 						Service: serviceName,
 						Metric:  mmetric.Name(),
 						State:   state,
@@ -296,24 +313,19 @@ type CalculationResultKey struct {
 // Change CalculationResults to use the flattened structure
 type CalculationResults map[CalculationResultKey]float64
 
-type workItem struct {
-	service     string
-	contractKey ContractKey
-}
-
-func (c *ContractState) Evaluate() CalculationResults {
+func (c *ContractState) Evaluate() domain.CalculationResults {
 	c.RLock()
 	defer c.RUnlock()
 
 	// Skip default contracts in evaluation
-	serviceContracts := make(map[string][]ContractKey)
+	serviceContracts := make(map[string][]domain.ContractKey)
 	for key := range c.Contracts {
 		if key.Service != "default" {
 			serviceContracts[key.Service] = append(serviceContracts[key.Service], key)
 		}
 	}
 
-	res := make(CalculationResults)
+	res := make(domain.CalculationResults)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
@@ -339,7 +351,7 @@ func (c *ContractState) Evaluate() CalculationResults {
 						continue
 					}
 
-					resultKey := CalculationResultKey{
+					resultKey := domain.CalculationResultKey{
 						Service: work.service,
 						Formula: work.contractKey.Formula,
 						State:   state,
@@ -369,7 +381,7 @@ func (c *ContractState) Evaluate() CalculationResults {
 	return res
 }
 
-func (c *ContractState) GetParameters(cc CalculationContract) CalculationParameters {
+func (c *ContractState) GetParameters(cc domain.CalculationContract) domain.CalculationParameters {
 	res := make(map[string]map[string]interface{})
 
 	for state := range cc.States {
@@ -381,7 +393,7 @@ func (c *ContractState) GetParameters(cc CalculationContract) CalculationParamet
 				serviceForLookup = ""
 			}
 
-			key := DatapointKey{
+			key := domain.DatapointKey{
 				Service: serviceForLookup,
 				Metric:  metric,
 				State:   state,
@@ -409,49 +421,8 @@ func filterMetricsFromFormula(formula string) map[string]bool {
 	return res
 }
 
-type CalculationContract struct {
-	Formula string
-	Service string
-	States  map[string]bool // can be empty, if no state has to be considered
-	Metrics map[string]bool // derived from formula for later metric filtering
-}
-
-func NewCalculationContractsFromProto(service string, reqs []*pb.CalculationRequest) map[string]CalculationContract {
-	res := make(map[string]CalculationContract, len(reqs))
-	for _, req := range reqs {
-		states := make(map[string]bool, len(req.States))
-		for _, state := range req.States {
-			states[state] = true
-		}
-
-		res[req.Formula] = CalculationContract{
-			Formula: req.Formula,
-			Service: service,
-			States:  states,
-			Metrics: filterMetricsFromFormula(req.Formula),
-		}
-	}
-	return res
-}
-
-type MetricDatapoint struct {
-	Metadata MetricMetadata
-	Value    Datapoint
-}
-
-type MetricMetadata struct {
-	MetricType pmetric.MetricType
-	MetricName string
-	MetricUnit string
-	Attributes pcommon.Map
-}
-
-type Datapoint struct {
-	ValueDataType pmetric.NumberDataPointValueType
-	FloatValue    float64
-}
-
-func CreateMetricDatapoint(metric pmetric.Metric, idx int) MetricDatapoint {
+// CreateMetricDatapoint creates a MetricDatapoint from an OpenTelemetry metric
+func CreateMetricDatapoint(metric pmetric.Metric, idx int) domain.MetricDatapoint {
 	ndp := metric.Sum().DataPoints().At(idx)
 	var value float64
 	switch ndp.ValueType() {
@@ -462,73 +433,38 @@ func CreateMetricDatapoint(metric pmetric.Metric, idx int) MetricDatapoint {
 	case pmetric.NumberDataPointValueTypeEmpty:
 		value = 0
 	}
-	md := MetricDatapoint{
-		Metadata: MetricMetadata{
-			MetricType: metric.Type(),
+
+	// Convert to domain types
+	md := domain.MetricDatapoint{
+		Metadata: domain.MetricMetadata{
+			MetricType: metric.Type().String(),
 			MetricName: metric.Name(),
 			MetricUnit: metric.Unit(),
 			Attributes: metric.Metadata(),
 		},
-		Value: Datapoint{
-			ValueDataType: ndp.ValueType(),
+		Value: domain.Datapoint{
+			ValueDataType: ndp.ValueType().String(),
 			FloatValue:    value,
 		},
 	}
 	return md
 }
 
-// Helper methods for CalculationResults
-func (cr CalculationResults) GetServicesMap() map[string]map[string]map[string]float64 {
-	result := make(map[string]map[string]map[string]float64)
-
-	for key, value := range cr {
-		// Initialize nested maps if they don't exist
-		if _, ok := result[key.Service]; !ok {
-			result[key.Service] = make(map[string]map[string]float64)
-		}
-		if _, ok := result[key.Service][key.Formula]; !ok {
-			result[key.Service][key.Formula] = make(map[string]float64)
+// NewCalculationContractsFromProto creates CalculationContracts from protobuf requests
+func NewCalculationContractsFromProto(service string, reqs []*pb.CalculationRequest) map[string]domain.CalculationContract {
+	res := make(map[string]domain.CalculationContract, len(reqs))
+	for _, req := range reqs {
+		states := make(map[string]bool, len(req.States))
+		for _, state := range req.States {
+			states[state] = true
 		}
 
-		result[key.Service][key.Formula][key.State] = value
-	}
-
-	return result
-}
-
-// GetServiceNames returns a slice of unique service names
-func (cr CalculationResults) GetServiceNames() []string {
-	services := make(map[string]struct{})
-	for key := range cr {
-		services[key.Service] = struct{}{}
-	}
-
-	result := make([]string, 0, len(services))
-	for service := range services {
-		result = append(result, service)
-	}
-	return result
-}
-
-// GetResultsForService returns all results for a given service
-func (cr CalculationResults) GetResultsForService(service string) map[string]map[string]float64 {
-	result := make(map[string]map[string]float64)
-
-	for key, value := range cr {
-		if key.Service == service {
-			if _, ok := result[key.Formula]; !ok {
-				result[key.Formula] = make(map[string]float64)
-			}
-			result[key.Formula][key.State] = value
+		res[req.Formula] = domain.CalculationContract{
+			Formula: req.Formula,
+			Service: service,
+			States:  states,
+			Metrics: filterMetricsFromFormula(req.Formula),
 		}
 	}
-
-	return result
-}
-
-// Add a method to normalize calculation results
-func (cr CalculationResults) Normalize(serviceNormalizationLimit float64) {
-	for key, value := range cr {
-		cr[key] = value / serviceNormalizationLimit // Normalize each result
-	}
+	return res
 }

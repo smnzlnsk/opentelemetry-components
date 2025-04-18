@@ -7,7 +7,9 @@ import (
 
 	pb "github.com/smnzlnsk/monitoring-proto-lib/gen/go/monitoring_proto_lib/monitoring/v1"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/cpuprocessor/internal/metadata"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/service"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -23,6 +25,7 @@ type CPUMetricProcessor struct {
 	cancel    context.CancelFunc
 	settings  processor.Settings
 	mb        *metadata.MetricsBuilder
+	services  *service.Services
 }
 
 var _ internal.MetricProcessor = (*CPUMetricProcessor)(nil)
@@ -94,6 +97,7 @@ func newCPUMetricProcessor(
 	_ context.Context,
 	set processor.Settings,
 	cfg internal.Config,
+	services *service.Services,
 ) (internal.MetricProcessor, error) {
 
 	return &CPUMetricProcessor{
@@ -101,13 +105,42 @@ func newCPUMetricProcessor(
 		config:    cfg.(*Config),
 		settings:  set,
 		logger:    set.Logger,
+		services:  services,
 	}, nil
 }
 
 func (c *CPUMetricProcessor) RegisterService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo, _ []*pb.CalculationRequest) error {
-	return c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), map[string]internal.CalculationContract{}, resource.Cpu)
+	// register service in internal contract state
+	err := c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), map[string]domain.CalculationContract{}, resource.Cpu)
+	if err != nil {
+		return err
+	}
+
+	// Register default contracts with contract service
+	defContracts := c.contracts.GetDefaultContracts()
+	contractsArray := make([]domain.CalculationContract, 0, len(defContracts))
+	// Change service name from default to serviceName
+	for _, contract := range defContracts {
+		contract.Service = fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber)
+		contractsArray = append(contractsArray, contract)
+	}
+
+	// notify contract service to create contracts
+	ctx := context.Background()
+	err = c.services.ContractService.CreateMany(ctx, contractsArray)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (c *CPUMetricProcessor) DeleteService(serviceName string, instanceNumber int32) error {
-	return c.contracts.DeleteService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber))
+	formattedServiceName := fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber)
+
+	// notify contract service to delete contracts
+	ctx := context.Background()
+	c.services.ContractService.DeleteContract(ctx, formattedServiceName)
+
+	return c.contracts.DeleteService(formattedServiceName)
 }

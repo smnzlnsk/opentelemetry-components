@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/domain"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,7 +29,7 @@ func TestContractState(t *testing.T) {
 		t.Run("basic registration", func(t *testing.T) {
 			cs := NewContractState()
 			service := "test-service"
-			contracts := map[string]CalculationContract{
+			contracts := map[string]domain.CalculationContract{
 				"[metric1] + [metric2]": {
 					Formula: "[metric1] + [metric2]",
 					Service: service,
@@ -41,7 +42,7 @@ func TestContractState(t *testing.T) {
 			require.NoError(t, err)
 
 			// Verify contract registration
-			key := ContractKey{Service: service, Formula: "[metric1] + [metric2]"}
+			key := domain.ContractKey{Service: service, Formula: "[metric1] + [metric2]"}
 			contract, exists := cs.Contracts[key]
 			require.True(t, exists, "Contract was not registered")
 			require.Equal(t, service, contract.Service, "Service mismatch")
@@ -60,7 +61,7 @@ func TestContractState(t *testing.T) {
 		t.Run("duplicate service registration", func(t *testing.T) {
 			cs := NewContractState()
 			service := "test-service"
-			contracts := map[string]CalculationContract{
+			contracts := map[string]domain.CalculationContract{
 				"[metric1]": {
 					Formula: "[metric1]",
 					Service: service,
@@ -88,12 +89,12 @@ func TestContractState(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify default contract registration
-		defaultKey := ContractKey{Service: "default", Formula: defaultFormula}
+		defaultKey := domain.ContractKey{Service: "default", Formula: defaultFormula}
 		_, exists := cs.Contracts[defaultKey]
 		require.True(t, exists, "Default contract not registered")
 
 		// Register service with its own contract
-		contracts := map[string]CalculationContract{
+		contracts := map[string]domain.CalculationContract{
 			"[metric1] + [metric2]": {
 				Formula: "[metric1] + [metric2]",
 				Service: service,
@@ -115,8 +116,8 @@ func TestContractState(t *testing.T) {
 		require.Equal(t, 2, serviceContractCount, "Expected 2 contracts (1 service + 1 default)")
 
 		// Verify specific contracts exist
-		key1 := ContractKey{Service: service, Formula: "[metric1] + [metric2]"}
-		key2 := ContractKey{Service: service, Formula: "[metric3] + [metric4]"}
+		key1 := domain.ContractKey{Service: service, Formula: "[metric1] + [metric2]"}
+		key2 := domain.ContractKey{Service: service, Formula: "[metric3] + [metric4]"}
 		_, exists = cs.Contracts[key1]
 		require.True(t, exists, "Service-specific contract not found")
 		_, exists = cs.Contracts[key2]
@@ -141,7 +142,7 @@ func TestContractState(t *testing.T) {
 			cs := NewContractState()
 			service := "service1"
 			formula := "[metric1] + [metric2] > 1.0"
-			contracts := map[string]CalculationContract{
+			contracts := map[string]domain.CalculationContract{
 				formula: {
 					Formula: formula,
 					Service: service,
@@ -165,7 +166,7 @@ func TestContractState(t *testing.T) {
 			require.NoError(t, err)
 
 			// Verify all cleanup
-			key := ContractKey{Service: service, Formula: formula}
+			key := domain.ContractKey{Service: service, Formula: formula}
 			_, exists := cs.Contracts[key]
 			require.False(t, exists, "Contract should be deleted")
 
@@ -177,7 +178,7 @@ func TestContractState(t *testing.T) {
 			// Verify datapoints cleanup
 			for metric := range contracts[formula].Metrics {
 				for state := range contracts[formula].States {
-					dpKey := DatapointKey{
+					dpKey := domain.DatapointKey{
 						Service: service,
 						Metric:  metric,
 						State:   state,
@@ -217,15 +218,15 @@ func BenchmarkRegisterService(b *testing.B) {
 }
 
 // Helper function to generate test contracts
-func generateTestContracts(service string, count int) map[string]CalculationContract {
-	contracts := make(map[string]CalculationContract)
+func generateTestContracts(service string, count int) map[string]domain.CalculationContract {
+	contracts := make(map[string]domain.CalculationContract)
 	for i := 0; i < count; i++ {
 		formula := fmt.Sprintf("[metric%d] + [metric%d]", i*2+1, i*2+2)
 		metrics := map[string]bool{
 			fmt.Sprintf("metric%d", i*2+1): true,
 			fmt.Sprintf("metric%d", i*2+2): true,
 		}
-		contracts[formula] = CalculationContract{
+		contracts[formula] = domain.CalculationContract{
 			Formula: formula,
 			Service: service,
 			States:  map[string]bool{"running": true},
@@ -245,7 +246,7 @@ func TestRegisterServiceWithDefaults(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create service-specific contracts
-	serviceContracts := map[string]CalculationContract{
+	serviceContracts := map[string]domain.CalculationContract{
 		"[metric1] + [metric2]": {
 			Formula: "[metric1] + [metric2]",
 			Service: service,
@@ -267,8 +268,8 @@ func TestRegisterServiceWithDefaults(t *testing.T) {
 	require.Equal(t, 2, serviceContractCount, "Expected 2 contracts (1 service + 1 default)")
 
 	// Verify both formulas exist
-	key1 := ContractKey{Service: service, Formula: "[metric1] + [metric2]"}
-	key2 := ContractKey{Service: service, Formula: "[metric3] + [metric4]"}
+	key1 := domain.ContractKey{Service: service, Formula: "[metric1] + [metric2]"}
+	key2 := domain.ContractKey{Service: service, Formula: "[metric3] + [metric4]"}
 	_, exists := cs.Contracts[key1]
 	require.True(t, exists, "Service-specific contract not found")
 	_, exists = cs.Contracts[key2]
@@ -314,7 +315,7 @@ func TestDeleteService(t *testing.T) {
 			cs := NewContractState()
 
 			// Setup initial state
-			contracts := map[string]CalculationContract{
+			contracts := map[string]domain.CalculationContract{
 				tt.initialFormula: {
 					Formula: tt.initialFormula,
 					Service: tt.initialService,
@@ -328,7 +329,7 @@ func TestDeleteService(t *testing.T) {
 			require.NoError(t, err)
 
 			// Verify initial setup
-			key := ContractKey{Service: tt.initialService, Formula: tt.initialFormula}
+			key := domain.ContractKey{Service: tt.initialService, Formula: tt.initialFormula}
 			_, exists := cs.Contracts[key]
 			require.True(t, exists, "Contract should exist before deletion")
 
@@ -363,7 +364,7 @@ func TestDeleteService(t *testing.T) {
 			// Verify datapoints were cleaned up
 			for metric := range tt.expectedMetrics {
 				for state := range tt.initialStates {
-					dpKey := DatapointKey{
+					dpKey := domain.DatapointKey{
 						Service: tt.initialService,
 						Metric:  metric,
 						State:   state,
@@ -385,7 +386,7 @@ func TestDefaultContractHandling(t *testing.T) {
 	err := cs.GenerateDefaultContract(defaultFormula, map[string]bool{"running": true})
 	require.NoError(t, err)
 
-	defaultKey := ContractKey{Service: "default", Formula: defaultFormula}
+	defaultKey := domain.ContractKey{Service: "default", Formula: defaultFormula}
 	defaultContract, exists := cs.Contracts[defaultKey]
 	require.True(t, exists, "Default contract not registered")
 	require.Equal(t, "default", defaultContract.Service)
@@ -395,7 +396,7 @@ func TestDefaultContractHandling(t *testing.T) {
 	require.Contains(t, defaultContract.Metrics, "metric4")
 
 	// Register service and verify default contract is copied
-	contracts := map[string]CalculationContract{
+	contracts := map[string]domain.CalculationContract{
 		"[metric1] + [metric2]": {
 			Formula: "[metric1] + [metric2]",
 			Service: service,
@@ -408,7 +409,7 @@ func TestDefaultContractHandling(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify service has both its own contract and the default contract
-	serviceDefaultKey := ContractKey{Service: service, Formula: defaultFormula}
+	serviceDefaultKey := domain.ContractKey{Service: service, Formula: defaultFormula}
 	serviceContract, exists := cs.Contracts[serviceDefaultKey]
 	require.True(t, exists, "Default contract not copied to service")
 	require.Equal(t, service, serviceContract.Service)
@@ -441,7 +442,7 @@ func TestServiceRegistration(t *testing.T) {
 	t.Run("register with multiple states", func(t *testing.T) {
 		cs := NewContractState()
 		service := "test-service"
-		contracts := map[string]CalculationContract{
+		contracts := map[string]domain.CalculationContract{
 			"[metric1] + [metric2]": {
 				Formula: "[metric1] + [metric2]",
 				Service: service,
@@ -454,7 +455,7 @@ func TestServiceRegistration(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify contract registration
-		key := ContractKey{Service: service, Formula: "[metric1] + [metric2]"}
+		key := domain.ContractKey{Service: service, Formula: "[metric1] + [metric2]"}
 		contract, exists := cs.Contracts[key]
 		require.True(t, exists)
 		require.Equal(t, service, contract.Service)
@@ -472,7 +473,7 @@ func TestServiceRegistration(t *testing.T) {
 	t.Run("register with overlapping metrics", func(t *testing.T) {
 		cs := NewContractState()
 		service := "test-service"
-		contracts := map[string]CalculationContract{
+		contracts := map[string]domain.CalculationContract{
 			"[metric1] + [metric2]": {
 				Formula: "[metric1] + [metric2]",
 				Service: service,
@@ -516,7 +517,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 			err := cs.GenerateDefaultContract(formula, map[string]bool{"running": true})
 			require.NoError(t, err)
 
-			key := ContractKey{Service: "default", Formula: formula}
+			key := domain.ContractKey{Service: "default", Formula: formula}
 			contract, exists := cs.Contracts[key]
 			require.True(t, exists)
 			require.Equal(t, "default", contract.Service)
@@ -543,7 +544,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 		cs := NewContractState()
 
 		t.Run("register empty service name", func(t *testing.T) {
-			contracts := map[string]CalculationContract{
+			contracts := map[string]domain.CalculationContract{
 				"[metric1]": {Formula: "[metric1]"},
 			}
 			err := cs.RegisterService("", contracts, "100")
@@ -556,12 +557,12 @@ func TestContractState_Comprehensive(t *testing.T) {
 		})
 
 		t.Run("register with empty contracts", func(t *testing.T) {
-			err := cs.RegisterService("test", map[string]CalculationContract{}, "100")
+			err := cs.RegisterService("test", map[string]domain.CalculationContract{}, "100")
 			require.NoError(t, err, "Should allow empty contracts map")
 		})
 
 		t.Run("register with invalid formula", func(t *testing.T) {
-			contracts := map[string]CalculationContract{
+			contracts := map[string]domain.CalculationContract{
 				"[metric1] ++ [metric2]": {
 					Formula: "[metric1] ++ [metric2]",
 					Service: "test",
@@ -577,7 +578,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 
 		t.Run("overlapping states", func(t *testing.T) {
 			// Register first contract
-			err := cs.RegisterService("service1", map[string]CalculationContract{
+			err := cs.RegisterService("service1", map[string]domain.CalculationContract{
 				"[metric1]": {
 					Formula: "[metric1]",
 					Service: "service1",
@@ -588,7 +589,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 			require.NoError(t, err)
 
 			// Register second contract with overlapping states
-			err = cs.RegisterService("service2", map[string]CalculationContract{
+			err = cs.RegisterService("service2", map[string]domain.CalculationContract{
 				"[metric1]": {
 					Formula: "[metric1]",
 					Service: "service2",
@@ -610,7 +611,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 			cs := NewContractState()
 
 			// Register service with multiple metrics
-			err := cs.RegisterService("service1", map[string]CalculationContract{
+			err := cs.RegisterService("service1", map[string]domain.CalculationContract{
 				"[metric1] + [metric2]": {
 					Formula: "[metric1] + [metric2]",
 					Service: "service1",
@@ -638,7 +639,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 		t.Run("datapoint cleanup", func(t *testing.T) {
 			// Register service
 			service := "test-service"
-			err := cs.RegisterService(service, map[string]CalculationContract{
+			err := cs.RegisterService(service, map[string]domain.CalculationContract{
 				"[metric1]": {
 					Formula: "[metric1]",
 					Service: service,
@@ -649,12 +650,12 @@ func TestContractState_Comprehensive(t *testing.T) {
 			require.NoError(t, err)
 
 			// Add datapoints
-			dpKey := DatapointKey{
+			dpKey := domain.DatapointKey{
 				Service: service,
 				Metric:  "metric1",
 				State:   "running",
 			}
-			cs.Datapoints[dpKey] = MetricDatapoint{}
+			cs.Datapoints[dpKey] = domain.MetricDatapoint{}
 
 			// Delete service
 			err = cs.DeleteService(service)
@@ -681,7 +682,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 			wg.Add(1)
 			go func(svc string) {
 				defer wg.Done()
-				contracts := map[string]CalculationContract{
+				contracts := map[string]domain.CalculationContract{
 					"[metric2]": {
 						Formula: "[metric2]",
 						Service: svc,
