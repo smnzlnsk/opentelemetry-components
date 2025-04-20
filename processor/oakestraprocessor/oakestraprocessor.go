@@ -105,15 +105,15 @@ func (p *MultiProcessor) Start(ctx context.Context, host component.Host) error {
 	ctx, cancel = context.WithCancel(ctx)
 	p.cancel = cancel
 
-	// Start gRPC server
-	if err := p.grpcServer.Start(); err != nil {
-		return fmt.Errorf("failed to start gRPC server: %w", err)
-	}
-
 	for _, subp := range p.processors {
 		if err := subp.Start(ctx, host); err != nil {
 			return err
 		}
+	}
+
+	// Start gRPC server
+	if err := p.grpcServer.Start(); err != nil {
+		return fmt.Errorf("failed to start gRPC server: %w", err)
 	}
 
 	return nil
