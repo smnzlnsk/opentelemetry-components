@@ -224,9 +224,6 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 			p.logger.Error("Failed to start HTTP server", zap.Error(err))
 			return err
 		}
-		p.logger.Info("Started HTTP server",
-			zap.String("host", p.config.HTTPServer.Host),
-			zap.Int("port", p.config.HTTPServer.Port))
 	}
 
 	return nil
