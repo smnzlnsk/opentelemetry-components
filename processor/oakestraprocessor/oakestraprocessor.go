@@ -122,15 +122,15 @@ func (p *MultiProcessor) Start(ctx context.Context, host component.Host) error {
 func (p *MultiProcessor) Shutdown(ctx context.Context) error {
 	p.logger.Info("Shutting down Oakestra Processor")
 
-	// Stop gRPC server
-	if p.grpcServer != nil {
-		p.grpcServer.Stop()
-	}
-
 	for _, subp := range p.processors {
 		if err := subp.Shutdown(ctx); err != nil {
 			return err
 		}
+	}
+
+	// Stop gRPC server
+	if p.grpcServer != nil {
+		p.grpcServer.Stop()
 	}
 
 	// Close MongoDB client
