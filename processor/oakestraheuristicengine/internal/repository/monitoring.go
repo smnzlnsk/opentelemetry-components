@@ -102,11 +102,15 @@ func (r *monitoringRepository) mergeHostMetrics(existing, new domain.DBHostMetri
 				// Append datapoints to existing entry
 				existing[idx].Datapoints = append(existing[idx].Datapoints, newDP.Datapoints...)
 
-				// Keep only the latest N datapoints (e.g., 100)
-				if len(existing[idx].Datapoints) > 100 {
-					existing[idx].Datapoints = existing[idx].Datapoints[len(existing[idx].Datapoints)-100:]
+				// Keep only the latest 5 datapoints to limit data amount
+				if len(existing[idx].Datapoints) > 5 {
+					existing[idx].Datapoints = existing[idx].Datapoints[len(existing[idx].Datapoints)-5:]
 				}
 			} else {
+				// For new metrics, also ensure we don't exceed 5 datapoints
+				if len(newDP.Datapoints) > 5 {
+					newDP.Datapoints = newDP.Datapoints[len(newDP.Datapoints)-5:]
+				}
 				// Add new metric
 				existing = append(existing, newDP)
 			}
