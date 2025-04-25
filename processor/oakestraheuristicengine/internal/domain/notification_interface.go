@@ -36,6 +36,6 @@ type NotificationInterfaceRegistry interface {
 }
 
 type NotificationInterface interface {
-	Notify() error
+	Notify(notification interface{}) error
 	Type() NotificationInterfaceCapability
 }

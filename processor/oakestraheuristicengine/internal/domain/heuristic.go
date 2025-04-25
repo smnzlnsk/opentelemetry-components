@@ -7,13 +7,13 @@ const (
 )
 
 type HeuristicEntityFactory interface {
-	CreateHeuristicEntity(heuristicType HeuristicType) (HeuristicEntity, error)
+	CreateHeuristicEntity(heuristicType HeuristicType, services Services) (HeuristicEntity, error)
 }
 
 type HeuristicEntity interface {
 	Processors() map[string]Processor
 	AddProcessor(processor Processor)
-	Evaluate(processorIdentifier string, appname string, values map[string]interface{}) Evaluation
+	Evaluate(processorIdentifier string, arguments ...interface{}) EvaluationResult
 	Start() error
 	Shutdown() error
 }

@@ -14,13 +14,17 @@ type pmockHeuristicEntity struct {
 	evaluateFunc func(processorIdentifier string, jobname string, values map[string]interface{}) domain.Evaluation
 }
 
-func (m *pmockHeuristicEntity) Evaluate(processorIdentifier string, jobname string, values map[string]interface{}) domain.Evaluation {
+func (m *pmockHeuristicEntity) Evaluate(processorIdentifier string, options ...interface{}) domain.EvaluationResult {
 	if m.evaluateFunc != nil {
-		return m.evaluateFunc(processorIdentifier, jobname, values)
+		evaluation := m.evaluateFunc(processorIdentifier, "test_job", map[string]interface{}{})
+		return domain.EvaluationResult{
+			JobName: evaluation.JobName,
+			Results: evaluation.Entries,
+		}
 	}
-	return domain.Evaluation{
-		JobName: jobname,
-		Entries: []domain.EvaluationEntry{
+	return domain.EvaluationResult{
+		JobName: "test_job",
+		Results: []domain.EvaluationEntry{
 			{InstanceNumber: 1, Priority: 1.0},
 		},
 	}
@@ -33,7 +37,7 @@ type pmockNotificationInterface struct {
 	err      error
 }
 
-func (m *pmockNotificationInterface) Notify() error {
+func (m *pmockNotificationInterface) Notify(notification interface{}) error {
 	m.notified = true
 	return m.err
 }
@@ -95,7 +99,7 @@ func TestPolicy(t *testing.T) {
 	})
 
 	t.Run("TestEnforceWithAlert", func(t *testing.T) {
-		err := p.Enforce("test_processor", "test_job", map[string]interface{}{})
+		err := p.Enforce("test_processor", "test_job")
 		assert.NoError(t, err)
 		assert.True(t, mockAlert.notified)
 		assert.False(t, mockRoute.notified)
@@ -116,7 +120,7 @@ func TestPolicy(t *testing.T) {
 			}
 		}
 
-		err := p.Enforce("test_processor", "test_job", map[string]interface{}{})
+		err := p.Enforce("test_processor", "test_job")
 		assert.NoError(t, err)
 		assert.False(t, mockAlert.notified)
 		assert.True(t, mockRoute.notified)

@@ -6,12 +6,16 @@ import (
 	"go.uber.org/zap"
 )
 
-type Services struct {
-	MonitoringService domain.MonitoringService
+type services struct {
+	MetricsService domain.MetricsService
 }
 
-func NewServices(repositories *repository.Repositories, logger *zap.Logger) *Services {
-	return &Services{
-		MonitoringService: NewMonitoringService(repositories.MonitoringRepository, logger),
+func NewServices(repositories *repository.Repositories, logger *zap.Logger) *services {
+	return &services{
+		MetricsService: NewMetricsService(repositories.MetricsRepository, logger),
 	}
+}
+
+func (s *services) GetMetricsService() domain.MetricsService {
+	return s.MetricsService
 }

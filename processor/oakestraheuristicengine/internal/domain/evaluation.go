@@ -10,6 +10,13 @@ type Evaluation struct {
 }
 
 type EvaluationEntry struct {
-	InstanceNumber int
-	Priority       float64
+	InstanceNumber int     `json:"instance_number"`
+	Priority       float64 `json:"priority"`
+	IpType         string  `json:"IpType,omitempty"`
+}
+
+type EvaluationResult struct {
+	JobName string                            `json:"job_name"`
+	Values  map[string]map[string]interface{} `json:"values"`
+	Results []EvaluationEntry                 `json:"results"`
 }

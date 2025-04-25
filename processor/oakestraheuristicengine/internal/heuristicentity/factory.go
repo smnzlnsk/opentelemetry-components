@@ -16,10 +16,10 @@ func NewHeuristicEntityFactory(logger *zap.Logger) domain.HeuristicEntityFactory
 	return &heuristicEntityFactory{logger: logger}
 }
 
-func (f *heuristicEntityFactory) CreateHeuristicEntity(heuristicType domain.HeuristicType) (domain.HeuristicEntity, error) {
+func (f *heuristicEntityFactory) CreateHeuristicEntity(heuristicType domain.HeuristicType, services domain.Services) (domain.HeuristicEntity, error) {
 	switch heuristicType {
 	case domain.RoutingEntity:
-		return routing.NewRoutingEntity(f.logger), nil
+		return routing.NewRoutingEntity(services, f.logger), nil
 	default:
 		return nil, fmt.Errorf("heuristic type %s not found", heuristicType)
 	}

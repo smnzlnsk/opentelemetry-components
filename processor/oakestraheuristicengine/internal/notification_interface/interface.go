@@ -16,7 +16,7 @@ type notificationInterface struct {
 	endpoint   string
 }
 
-func (n *notificationInterface) Notify() error {
+func (n *notificationInterface) Notify(notification interface{}) error {
 	jsonData := map[string]interface{}{
 		n.capability.String(): "true",
 		"message":             "test",

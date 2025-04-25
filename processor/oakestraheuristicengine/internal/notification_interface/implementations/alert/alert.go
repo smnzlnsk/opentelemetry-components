@@ -24,7 +24,7 @@ type alertNotifier struct {
 	capability domain.NotificationInterfaceCapability
 }
 
-func (a *alertNotifier) Notify() error {
+func (a *alertNotifier) Notify(_ interface{}) error {
 	jsonData := map[string]interface{}{
 		"alert":   "true",
 		"message": "test",

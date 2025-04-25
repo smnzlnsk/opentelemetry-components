@@ -25,13 +25,10 @@ type routeNotifier struct {
 
 var _ domain.NotificationInterface = (*routeNotifier)(nil)
 
-func (r *routeNotifier) Notify() error {
-	jsonData := map[string]interface{}{
-		"route":   "true",
-		"message": "test",
-	}
+func (r *routeNotifier) Notify(notification interface{}) error {
+	jobData := notification.(domain.Job)
 
-	data, err := json.Marshal(jsonData)
+	data, err := json.Marshal(jobData)
 	if err != nil {
 		return err
 	}

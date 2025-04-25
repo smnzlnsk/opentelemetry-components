@@ -6,7 +6,8 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric"
 )
 
-type MonitoringRepository interface {
+type MetricsRepository interface {
 	SaveMetrics(ctx context.Context, md pmetric.Metrics) error
-	GetHostInstanceMetrics(ctx context.Context, host string, serviceInstance string) (DBHostMetrics, error)
+	GetJobMetrics(ctx context.Context, jobName string) (DBHostMetrics, error)
+	GetJobMetricsAsMap(ctx context.Context, jobName string) (MapHostMetrics, error)
 }

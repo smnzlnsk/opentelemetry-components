@@ -25,7 +25,7 @@ type scheduleNotifier struct {
 
 var _ domain.NotificationInterface = (*scheduleNotifier)(nil)
 
-func (s *scheduleNotifier) Notify() error {
+func (s *scheduleNotifier) Notify(notification interface{}) error {
 	jsonData := map[string]interface{}{
 		"route":   "true",
 		"message": "test",

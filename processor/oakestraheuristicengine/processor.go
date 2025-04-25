@@ -9,7 +9,6 @@ import (
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/heuristicentity"
 	internalhttp "github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/http"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/notification_interface"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/persistence/memory"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/persistence/mongodb"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/policy"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/repository"
@@ -26,15 +25,12 @@ type heuristicEngineProcessor struct {
 	nextConsumer consumer.Metrics
 	logger       *zap.Logger
 
-	// reponsible to store metrics
-	metricStore domain.MetricStore
-
 	// database client
 	mongodbClient *mongodb.Client
 	repositories  *repository.Repositories
 
 	// services
-	services *service.Services
+	services domain.Services
 
 	// policies
 	policies              map[string]domain.Policy
@@ -53,33 +49,15 @@ type heuristicEngineProcessor struct {
 }
 
 func newProcessor(config *Config, set processor.Settings, next consumer.Metrics) (*heuristicEngineProcessor, error) {
-	// TODO: add more entities here
-	availableEntities := []domain.HeuristicType{
-		domain.RoutingEntity,
-	}
-	// initialize entity factory
-	entityFactory := heuristicentity.NewHeuristicEntityFactory(set.Logger)
-
-	// initialize active entities
-	activeEntities := make(map[domain.HeuristicType]domain.HeuristicEntity)
-	for _, entityType := range availableEntities {
-		entity, err := entityFactory.CreateHeuristicEntity(entityType)
-		if err != nil {
-			return nil, err
-		}
-		activeEntities[entityType] = entity
-	}
-
 	return &heuristicEngineProcessor{
 		config:                        config,
 		nextConsumer:                  next,
 		logger:                        set.Logger,
-		metricStore:                   memory.NewMetricStore(set.Logger),
 		policies:                      make(map[string]domain.Policy),
 		policyToEngineMapping:         make(map[string]domain.HeuristicEntity),
 		notificationInterfaceRegistry: notification_interface.NewNotificationInterfaceRegistry(set.Logger),
-		activeEntities:                activeEntities,
-		availableEntities:             availableEntities,
+		activeEntities:                make(map[domain.HeuristicType]domain.HeuristicEntity),
+		availableEntities:             []domain.HeuristicType{},
 
 		// created on Start
 		httpServer:    nil,
@@ -91,32 +69,13 @@ func newProcessor(config *Config, set processor.Settings, next consumer.Metrics)
 // ConsumeMetrics is called when the processor receives metrics
 // it saves the metrics to history for later use
 func (p *heuristicEngineProcessor) ConsumeMetrics(ctx context.Context, md pmetric.Metrics) error {
-	err := p.metricStore.Save(md)
-	if err != nil {
-		p.logger.Error("failed to save metrics to metric store", zap.Error(err))
-	}
 
 	// save metrics to database
-	err = p.services.MonitoringService.SaveMetrics(ctx, md)
+	err := p.services.GetMetricsService().SaveMetrics(ctx, md)
 	if err != nil {
 		p.logger.Error("failed to save metrics to database", zap.Error(err))
 	}
 
-	// values := p.metricStore.GetValueMapByString()
-
-	/*for _, policy := range p.policies {
-		err := policy.Check(values)
-		if err == nil {
-			// If check passes, enforce the policy which will trigger notifications
-			processors := policy.HeuristicEngine().Processors()
-			for processorIdentifier := range processors {
-				err = policy.Enforce(processorIdentifier, values)
-				if err != nil {
-					p.logger.Error("failed to enforce policy", zap.String("policy", policy.Name()), zap.Error(err))
-				}
-			}
-		}
-	}*/
 	return p.nextConsumer.ConsumeMetrics(ctx, md)
 }
 
@@ -125,7 +84,6 @@ func (p *heuristicEngineProcessor) Capabilities() consumer.Capabilities {
 }
 
 func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) error {
-
 	// initialize mongodb client
 	dbClient, err := mongodb.NewClient(&p.config.MongoDB, p.logger)
 	if err != nil {
@@ -144,6 +102,22 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 		}
 	}
 
+	// TODO: add more entities here
+	availableEntities := []domain.HeuristicType{
+		domain.RoutingEntity,
+	}
+	// initialize entity factory
+	entityFactory := heuristicentity.NewHeuristicEntityFactory(p.logger)
+
+	// initialize active entities
+	for _, entityType := range availableEntities {
+		entity, err := entityFactory.CreateHeuristicEntity(entityType, p.services)
+		if err != nil {
+			return err
+		}
+		p.activeEntities[entityType] = entity
+	}
+
 	// initialize policies
 	policyBuilder := policy.NewPolicyBuilder()
 	notificationInterfaceBuilder := notification_interface.NewNotificationInterfaceBuilder()
@@ -158,15 +132,15 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 
 	alertNotifier := notificationInterfaceBuilder.
 		WithHost("localhost").
-		WithPort(8091).
-		WithEndpoint("/api/v1/alert").
+		WithPort(p.config.ServiceManager.Port).
+		WithEndpoint("/api/net/routing/alert").
 		WithCapability(domain.NotificationInterfaceCapability_Alert).
 		Build()
 
 	routingNotifier := notificationInterfaceBuilder.
 		WithHost("localhost").
-		WithPort(8091).
-		WithEndpoint("/api/v1/routing").
+		WithPort(p.config.ServiceManager.Port).
+		WithEndpoint("/api/net/routing/update").
 		WithCapability(domain.NotificationInterfaceCapability_Route).
 		Build()
 
@@ -219,7 +193,7 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 			Host: p.config.HTTPServer.Host,
 			Port: p.config.HTTPServer.Port,
 		}
-		p.httpServer = internalhttp.NewServer(serverConfig, p.logger, p.policies, p.metricStore)
+		p.httpServer = internalhttp.NewServer(serverConfig, p.logger, p.policies, p.services.GetMetricsService())
 		if err := p.httpServer.Start(); err != nil {
 			p.logger.Error("Failed to start HTTP server", zap.Error(err))
 			return err

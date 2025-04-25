@@ -7,11 +7,11 @@ import (
 )
 
 type Repositories struct {
-	MonitoringRepository domain.MonitoringRepository
+	MetricsRepository domain.MetricsRepository
 }
 
 func NewRepositories(client *mongodb.Client, logger *zap.Logger) *Repositories {
 	return &Repositories{
-		MonitoringRepository: NewMonitoringRepository(client.GetDatabase().Collection("metrics"), logger),
+		MetricsRepository: NewMetricsRepository(client.GetDatabase().Collection("metrics"), logger),
 	}
 }

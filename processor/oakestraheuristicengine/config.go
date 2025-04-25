@@ -17,9 +17,10 @@ const (
 // Config defines the configuration for the oakestraheuristicengine processor.
 type Config struct {
 	// Add your configuration fields here
-	HTTPServer             config.HTTPServerConfig `mapstructure:"http_server"`
-	NotificationInterfaces config.InterfacesConfig `mapstructure:"interfaces"`
-	MongoDB                config.MongoDBConfig    `mapstructure:"mongodb"`
+	HTTPServer             config.HTTPServerConfig     `mapstructure:"http_server"`
+	NotificationInterfaces config.InterfacesConfig     `mapstructure:"interfaces"`
+	MongoDB                config.MongoDBConfig        `mapstructure:"mongodb"`
+	ServiceManager         config.ServiceManagerConfig `mapstructure:"service_manager"`
 }
 
 var _ component.Config = (*Config)(nil)

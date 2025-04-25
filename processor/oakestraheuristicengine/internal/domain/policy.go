@@ -18,10 +18,10 @@ type PolicyBuilder interface {
 
 type Policy interface {
 	Check(values map[string]interface{}) error
-	Enforce(processorIdentifier string, appname string, values map[string]interface{}) error
+	Enforce(processorIdentifier string, arguments ...interface{}) error
 	CheckPreEvaluationCondition(values map[string]interface{}) error
 	CheckEvaluationCondition(values map[string]interface{}) error
-	CheckNotificationConditions(values map[string]interface{}) error
+	CheckNotificationConditions(evaluationResult EvaluationResult) error
 	Capabilities() []NotificationInterfaceCapability
 	Name() string
 	HeuristicEngine() HeuristicEntity

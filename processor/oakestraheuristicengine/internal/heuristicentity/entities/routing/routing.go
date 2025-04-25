@@ -1,6 +1,8 @@
 package routing
 
 import (
+	"context"
+	"fmt"
 	"math/rand/v2"
 
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
@@ -30,11 +32,12 @@ func (d *dynamicRandomEvaluator) Evaluate(factor float64, params map[string]inte
 }
 
 type routingEntity struct {
+	services       domain.Services
 	processorStore domain.ProcessorStore
 	logger         *zap.Logger
 }
 
-func NewRoutingEntity(logger *zap.Logger) domain.HeuristicEntity {
+func NewRoutingEntity(services domain.Services, logger *zap.Logger) domain.HeuristicEntity {
 	processorStore := processor.NewStore()
 
 	// TODO: Add processors here
@@ -59,11 +62,57 @@ func NewRoutingEntity(logger *zap.Logger) domain.HeuristicEntity {
 	return &routingEntity{
 		processorStore: processorStore,
 		logger:         logger,
+		services:       services,
 	}
 }
 
-func (r *routingEntity) Evaluate(processorIdentifier string, appname string, values map[string]interface{}) domain.Evaluation {
-	return r.processorStore.Get(processorIdentifier).Process(appname, values)
+// Evaluate evaluates the routing entity
+// arguments:
+// - processorIdentifier: the identifier of the processor to evaluate
+// - first positional argument: jobRequest [domain.JobRequest]
+func (r *routingEntity) Evaluate(processorIdentifier string, arguments ...interface{}) domain.EvaluationResult {
+	if len(arguments) == 0 {
+		r.logger.Error("No arguments provided to Evaluate")
+		return domain.EvaluationResult{JobName: "unknown", Values: make(map[string]map[string]interface{})}
+	}
+
+	jobRequest, ok := arguments[0].(domain.JobRequest)
+	if !ok {
+		r.logger.Error("First argument is not a JobRequest", zap.Any("actual_type", fmt.Sprintf("%T", arguments[0])))
+		return domain.EvaluationResult{JobName: "unknown", Values: make(map[string]map[string]interface{})}
+	}
+	jobName := jobRequest.JobData.JobName
+	instances := jobRequest.JobData.ServiceInstanceList
+
+	result := domain.EvaluationResult{
+		JobName: jobName,
+		Values:  make(map[string]map[string]interface{}),
+		Results: make([]domain.EvaluationEntry, len(instances)),
+	}
+
+	values, err := r.services.GetMetricsService().GetJobMetricsAsMap(
+		context.Background(),
+		jobName,
+	)
+	if err != nil {
+		r.logger.Error("Failed to get job metrics", zap.Error(err))
+		return result
+	}
+
+	for i := range instances {
+		instanceName := fmt.Sprintf("%s.instance.%d", jobName, instances[i].InstanceNumber)
+		instanceValues := values.InstanceMetricsForEvaluation(instanceName)
+
+		result.Values[instanceName] = instanceValues
+
+		result.Results = append(result.Results, domain.EvaluationEntry{
+			InstanceNumber: instances[i].InstanceNumber,
+			IpType:         jobRequest.IpType,
+			Priority:       r.processorStore.Get(processorIdentifier).Evaluator().Evaluate(1, instanceValues),
+		})
+	}
+
+	return result
 }
 
 func (r *routingEntity) Start() error {

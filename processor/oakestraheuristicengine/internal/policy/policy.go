@@ -66,42 +66,48 @@ func (p *policy) CheckEvaluationCondition(values map[string]interface{}) error {
 	return fmt.Errorf("evaluation conditions not met")
 }
 
-func (p *policy) CheckNotificationConditions(values map[string]interface{}) error {
-	for _, condition := range p.alertConditions {
-		result, err := condition.Evaluate(values)
-		if err != nil {
-			return err
+func (p *policy) CheckNotificationConditions(evaluationResult domain.EvaluationResult) error {
+	for _, result := range evaluationResult.Results {
+		instanceName := fmt.Sprintf("%s.instance.%d", evaluationResult.JobName, result.InstanceNumber)
+		fmt.Println(instanceName)
+		values := evaluationResult.Values[instanceName]
+		fmt.Println(evaluationResult.Values[instanceName])
+		values["result"] = result.Priority
+		for _, condition := range p.alertConditions {
+			result, err := condition.Evaluate(values)
+			if err != nil {
+				return err
+			}
+			if result == true {
+				return p.NotificationInterface(domain.NotificationInterfaceCapability_Alert).Notify(evaluationResult)
+			}
 		}
-		if result == true {
-			return p.NotificationInterface(domain.NotificationInterfaceCapability_Alert).Notify()
-		}
-	}
 
-	for _, condition := range p.routeConditions {
-		result, err := condition.Evaluate(values)
-		if err != nil {
-			return err
+		for _, condition := range p.routeConditions {
+			result, err := condition.Evaluate(values)
+			if err != nil {
+				return err
+			}
+			if result == true {
+				return p.NotificationInterface(domain.NotificationInterfaceCapability_Route).Notify(evaluationResult)
+			}
 		}
-		if result == true {
-			return p.NotificationInterface(domain.NotificationInterfaceCapability_Route).Notify()
-		}
-	}
 
-	for _, condition := range p.scheduleConditions {
-		result, err := condition.Evaluate(values)
-		if err != nil {
-			return err
-		}
-		if result == true {
-			return p.NotificationInterface(domain.NotificationInterfaceCapability_Schedule).Notify()
+		for _, condition := range p.scheduleConditions {
+			result, err := condition.Evaluate(values)
+			if err != nil {
+				return err
+			}
+			if result == true {
+				return p.NotificationInterface(domain.NotificationInterfaceCapability_Schedule).Notify(evaluationResult)
+			}
 		}
 	}
 	return nil
 }
-func (p *policy) Enforce(processorIdentifier string, jobname string, values map[string]interface{}) error {
-	result := p.heuristicEntity.Evaluate(processorIdentifier, jobname, values)
-	values["result"] = result.Entries[0].Priority
-	return p.CheckNotificationConditions(values)
+func (p *policy) Enforce(processorIdentifier string, arguments ...interface{}) error {
+	evaluationResult := p.heuristicEntity.Evaluate(processorIdentifier, arguments...)
+	return p.CheckNotificationConditions(evaluationResult)
 }
 
 func (p *policy) Capabilities() []domain.NotificationInterfaceCapability {

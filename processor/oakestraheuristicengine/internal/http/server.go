@@ -22,11 +22,12 @@ type Server struct {
 	// policies
 	policies map[string]domain.Policy
 
-	// metric store
-	metricStore domain.MetricStore
-
 	// HTTP server instance
 	server *http.Server
+
+	// metrics service
+	// needed to retrieve service metrics for evaluation
+	metricsService domain.MetricsService
 }
 
 // ServerConfig contains configuration for the HTTP server
@@ -36,14 +37,14 @@ type ServerConfig struct {
 }
 
 // NewServer creates a new policy evaluation HTTP server
-func NewServer(config ServerConfig, logger *zap.Logger, policies map[string]domain.Policy, metricStore domain.MetricStore) *Server {
+func NewServer(config ServerConfig, logger *zap.Logger, policies map[string]domain.Policy, metricsService domain.MetricsService) *Server {
 	return &Server{
-		host:        config.Host,
-		port:        config.Port,
-		router:      http.NewServeMux(),
-		logger:      logger,
-		policies:    policies,
-		metricStore: metricStore,
+		host:           config.Host,
+		port:           config.Port,
+		router:         http.NewServeMux(),
+		logger:         logger,
+		policies:       policies,
+		metricsService: metricsService,
 	}
 }
 
@@ -107,7 +108,7 @@ func (s *Server) setupRoutes() {
 func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 	// Parse appName from request body
 
-	var requestBody domain.Job
+	var requestBody domain.JobRequest
 
 	if r.Body != nil {
 		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -116,8 +117,9 @@ func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	jobName := requestBody.JobName
-	instances := requestBody.ServiceInstanceList
+	fmt.Println(requestBody)
+
+	instances := requestBody.JobData.ServiceInstanceList
 
 	// Extract the routing policy from the URL path
 	path := strings.TrimPrefix(r.URL.Path, "/policy/")
@@ -149,50 +151,66 @@ func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get the processor from the policy
-	values := s.metricStore.GetValueMapByString()
-	fmt.Println("values", values)
 	processors := policy.HeuristicEngine().Processors()
 
 	// Check if a specific processor was requested
-	var processor domain.Processor
 	var exists bool
 
 	if processorName != "" {
 		// Check if specified processor exists
-		processor, exists = processors[processorName]
+		_, exists = processors[processorName]
 		if !exists {
 			http.Error(w, fmt.Sprintf("Processor '%s' not found", processorName), http.StatusNotFound)
 			return
 		}
 	} else {
 		// Default to "routing" processor if none specified
-		processor, exists = processors["default"]
+		_, exists = processors["default"]
 		if !exists {
 			http.Error(w, "Processor not found", http.StatusNotFound)
 			return
 		}
 	}
 
-	for i := range instances {
-		instances[i].Priority = processor.Evaluator().Evaluate(1, values) // TODO: incorporate job name for evaluation
-	}
+	/*
+		for i := range instances {
+			values, err := s.metricsService.GetJobMetricsAsMap(
+				context.Background(),
+				jobName,
+			)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			instanceValues := values.InstanceMetricsForEvaluation(
+				fmt.Sprintf("%s.instance.%d", jobName, instances[i].InstanceNumber),
+			)
+			instances[i].Priority = processor.Evaluator().Evaluate(1, instanceValues) // TODO: incorporate job name for evaluation
+		}
+	*/
 
-	err := policy.Enforce(processorName, jobName, values)
+	err := policy.Enforce(processorName, requestBody)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	response := map[string]interface{}{
-		"policy":    policy.Name(),
-		"processor": processorName,
-		"result":    instances,
-	}
-
-	// Return JSON response
+	// Generate response directly to avoid JSON escaping issues
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+
+	// Marshal the instances array directly to bytes
+	instancesJSON, err := json.Marshal(instances)
+	if err != nil {
+		http.Error(w, "Failed to marshal instances: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	fmt.Println(instances)
+
+	fmt.Println(string(instancesJSON))
+	// Write response manually
+	fmt.Fprintf(w, `{"policy":"%s","processor":"%s","result":%s}`,
+		policy.Name(),
+		processorName,
+		string(instancesJSON))
 }

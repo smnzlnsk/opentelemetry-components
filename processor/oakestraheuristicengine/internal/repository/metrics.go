@@ -12,17 +12,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// monitoringRepository implements domain.MonitoringRepository
+// metricsRepository implements domain.MetricsRepository
 // It handles storing OpenTelemetry metrics in MongoDB
-type monitoringRepository struct {
+type metricsRepository struct {
 	collection  *mongo.Collection
 	logger      *zap.Logger
 	transformer domain.MetricsTransformer
 }
 
-// NewMonitoringRepository creates a new monitoring repository
-func NewMonitoringRepository(collection *mongo.Collection, logger *zap.Logger) domain.MonitoringRepository {
-	return &monitoringRepository{
+// NewMetricsRepository creates a new metrics repository
+func NewMetricsRepository(collection *mongo.Collection, logger *zap.Logger) domain.MetricsRepository {
+	return &metricsRepository{
 		collection:  collection,
 		logger:      logger,
 		transformer: middleware.NewMetricsTransformer(logger),
@@ -31,7 +31,7 @@ func NewMonitoringRepository(collection *mongo.Collection, logger *zap.Logger) d
 
 // SaveMetrics saves OpenTelemetry metrics to MongoDB
 // We assume all metrics in the input are from a single host
-func (r *monitoringRepository) SaveMetrics(ctx context.Context, md pmetric.Metrics) error {
+func (r *metricsRepository) SaveMetrics(ctx context.Context, md pmetric.Metrics) error {
 	// Extract the host from metrics using the transformer
 	host := r.transformer.ExtractHost(md)
 
@@ -81,7 +81,7 @@ func (r *monitoringRepository) SaveMetrics(ctx context.Context, md pmetric.Metri
 }
 
 // mergeHostMetrics merges new metrics into existing host metrics
-func (r *monitoringRepository) mergeHostMetrics(existing, new domain.DBHostMetrics) domain.DBHostMetrics {
+func (r *metricsRepository) mergeHostMetrics(existing, new domain.DBHostMetrics) domain.DBHostMetrics {
 	result := existing
 
 	// Helper function to add new datapoints to existing metrics
@@ -149,38 +149,68 @@ func (r *monitoringRepository) mergeHostMetrics(existing, new domain.DBHostMetri
 	return result
 }
 
-// GetHostInstanceMetrics gets the metrics for a host and service instance
-func (r *monitoringRepository) GetHostInstanceMetrics(ctx context.Context, host string, serviceInstance string) (domain.DBHostMetrics, error) {
-	// Create a filter to find the host
-	filter := bson.M{"host": host}
+// GetJobMetrics gets the metrics for a job
+func (r *metricsRepository) GetJobMetrics(ctx context.Context, jobName string) (domain.DBHostMetrics, error) {
+	// Create a filter to find hosts that have service instances with the specified job name
+	filter := bson.M{"service_instance_metrics.job_name": jobName}
 
 	// Query the database
-	var hostMetrics domain.DBHostMetrics
-	err := r.collection.FindOne(ctx, filter).Decode(&hostMetrics)
+	cursor, err := r.collection.Find(ctx, filter)
 	if err != nil {
-		r.logger.Error("Failed to get metrics from MongoDB", zap.Error(err), zap.String("host", host))
-		return domain.DBHostMetrics{Host: host}, err
+		r.logger.Error("Failed to find metrics from MongoDB", zap.Error(err), zap.String("job_name", jobName))
+		return domain.DBHostMetrics{}, err
+	}
+	defer cursor.Close(ctx)
+
+	// Combine all results into a single DBHostMetrics
+	result := domain.DBHostMetrics{
+		Host:                   "",
+		SystemMetrics:          []domain.DBMetricDatapoint{},
+		ServiceInstanceMetrics: []domain.DBServiceInstanceMetrics{},
 	}
 
-	// If service instance is specified, filter to only that service
-	if serviceInstance != "" {
-		// Filter to only the requested service
-		filteredMetrics := domain.DBHostMetrics{
-			Host:                   hostMetrics.Host,
-			SystemMetrics:          []domain.DBMetricDatapoint{},
-			ServiceInstanceMetrics: []domain.DBServiceInstanceMetrics{},
+	// Process all hosts that match the filter
+	for cursor.Next(ctx) {
+		var hostMetrics domain.DBHostMetrics
+		if err := cursor.Decode(&hostMetrics); err != nil {
+			r.logger.Error("Failed to decode host metrics", zap.Error(err), zap.String("job_name", jobName))
+			continue
 		}
 
-		// Find and include only the requested service instance
-		for _, service := range hostMetrics.ServiceInstanceMetrics {
-			if service.JobName == serviceInstance {
-				filteredMetrics.ServiceInstanceMetrics = append(filteredMetrics.ServiceInstanceMetrics, service)
-				break
+		// If this is the first host, use its name
+		if result.Host == "" {
+			result.Host = hostMetrics.Host
+		}
+
+		// Add system metrics
+		result.SystemMetrics = append(result.SystemMetrics, hostMetrics.SystemMetrics...)
+
+		// Add only service instance metrics that match the jobName
+		for _, serviceInstance := range hostMetrics.ServiceInstanceMetrics {
+			if serviceInstance.JobName == jobName {
+				result.ServiceInstanceMetrics = append(result.ServiceInstanceMetrics, serviceInstance)
 			}
 		}
-
-		return filteredMetrics, nil
 	}
 
-	return hostMetrics, nil
+	if err := cursor.Err(); err != nil {
+		r.logger.Error("Cursor error while getting job metrics", zap.Error(err), zap.String("job_name", jobName))
+		return domain.DBHostMetrics{}, err
+	}
+
+	// If no data was found
+	if result.Host == "" {
+		r.logger.Warn("No metrics found for job", zap.String("job_name", jobName))
+		return domain.DBHostMetrics{}, mongo.ErrNoDocuments
+	}
+
+	return result, nil
+}
+
+func (r *metricsRepository) GetJobMetricsAsMap(ctx context.Context, jobName string) (domain.MapHostMetrics, error) {
+	metrics, err := r.GetJobMetrics(ctx, jobName)
+	if err != nil {
+		return domain.MapHostMetrics{}, err
+	}
+	return r.transformer.TransformDBHostMetricsToMap(metrics)
 }

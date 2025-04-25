@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
@@ -76,6 +78,8 @@ func (t *metricsTransformer) TransformToDBHostMetrics(md pmetric.Metrics) (domai
 			serviceName = svcAttr.Str()
 		}
 
+		jobName, instanceNumber := splitServiceName(serviceName)
+
 		// Process all scope metrics for this resource
 		for j := 0; j < rm.ScopeMetrics().Len(); j++ {
 			sm := rm.ScopeMetrics().At(j)
@@ -90,7 +94,7 @@ func (t *metricsTransformer) TransformToDBHostMetrics(md pmetric.Metrics) (domai
 				}
 
 				// Extract datapoints
-				datapoint := t.ExtractDatapoint(metric)
+				datapoint := t.extractDatapoint(metric)
 				if datapoint == nil {
 					continue
 				}
@@ -107,8 +111,8 @@ func (t *metricsTransformer) TransformToDBHostMetrics(md pmetric.Metrics) (domai
 					if !exists {
 						// Create new service reference in map
 						hostMetrics.ServiceInstanceMetrics = append(hostMetrics.ServiceInstanceMetrics, domain.DBServiceInstanceMetrics{
-							JobName:        serviceName,
-							InstanceNumber: 0,
+							JobName:        jobName,
+							InstanceNumber: instanceNumber,
 							Metrics:        []domain.DBMetricDatapoint{},
 						})
 						serviceInstance = &hostMetrics.ServiceInstanceMetrics[len(hostMetrics.ServiceInstanceMetrics)-1]
@@ -118,6 +122,48 @@ func (t *metricsTransformer) TransformToDBHostMetrics(md pmetric.Metrics) (domai
 					// Add metric to service
 					serviceInstance.Metrics = append(serviceInstance.Metrics, *datapoint)
 				}
+			}
+		}
+	}
+
+	return hostMetrics, nil
+}
+
+// TransformDBHostMetricsToMap transforms DBHostMetrics to a MapHostMetrics
+func (t *metricsTransformer) TransformDBHostMetricsToMap(dbHostMetrics domain.DBHostMetrics) (domain.MapHostMetrics, error) {
+	hostMetrics := make(domain.MapHostMetrics)
+
+	// Initialize the host entry with empty maps
+	hostMetrics[dbHostMetrics.Host] = domain.MetricsStruct{
+		HostMetrics:            make(map[string]float64),
+		ServiceInstanceMetrics: make(map[string]domain.ServiceInstanceMetricsMap),
+	}
+
+	// Process system metrics
+	for _, systemMetric := range dbHostMetrics.SystemMetrics {
+		for i, datapoint := range systemMetric.Datapoints {
+			// Create a unique identifier for the metric
+			metricID := systemMetric.Identifier.Name + "|" + systemMetric.Identifier.State + "|" + strconv.Itoa(i)
+			hostMetrics[dbHostMetrics.Host].HostMetrics[metricID] = datapoint.Value
+		}
+	}
+
+	// Process service instance metrics
+	for _, serviceInstance := range dbHostMetrics.ServiceInstanceMetrics {
+		// Create the service identifier
+		serviceID := serviceInstance.JobName + ".instance." + strconv.Itoa(serviceInstance.InstanceNumber)
+
+		// Initialize the service metrics map if it doesn't exist
+		if _, exists := hostMetrics[dbHostMetrics.Host].ServiceInstanceMetrics[serviceID]; !exists {
+			hostMetrics[dbHostMetrics.Host].ServiceInstanceMetrics[serviceID] = make(domain.ServiceInstanceMetricsMap)
+		}
+
+		// Add each metric datapoint
+		for _, metric := range serviceInstance.Metrics {
+			for i, datapoint := range metric.Datapoints {
+				// Create a unique identifier for the metric
+				metricID := metric.Identifier.Name + "|" + metric.Identifier.State + "|" + strconv.Itoa(i)
+				hostMetrics[dbHostMetrics.Host].ServiceInstanceMetrics[serviceID][metricID] = datapoint.Value
 			}
 		}
 	}
@@ -191,7 +237,7 @@ func (t *metricsTransformer) MergeHostMetrics(existing, new domain.DBHostMetrics
 }
 
 // ExtractDatapoint extracts a single datapoint from a metric
-func (t *metricsTransformer) ExtractDatapoint(metric pmetric.Metric) *domain.DBMetricDatapoint {
+func (t *metricsTransformer) extractDatapoint(metric pmetric.Metric) *domain.DBMetricDatapoint {
 	name := metric.Name()
 	now := time.Now()
 
@@ -287,4 +333,21 @@ func IsSystemMetric(metricName string) bool {
 	}
 
 	return false
+}
+
+func splitServiceName(input string) (jobName string, instanceNum int) {
+	lastDotIndex := strings.LastIndex(input, ".")
+	if lastDotIndex != -1 {
+		// instance number is the last part of the service name
+		// we don't care about the error here because we assume the input is a valid service name
+		// f not, check the Oakestra backend
+		instanceNum, _ = strconv.Atoi(input[lastDotIndex+1:])
+
+		// job name is the part before the last dot
+		secondLastDotIndex := strings.LastIndex(input[:lastDotIndex], ".")
+		if secondLastDotIndex != -1 {
+			jobName = input[:secondLastDotIndex]
+		}
+	}
+	return
 }

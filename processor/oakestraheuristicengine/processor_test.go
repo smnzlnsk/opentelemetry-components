@@ -66,11 +66,11 @@ func (m *mockHeuristicEntity) Shutdown() error {
 	return nil
 }
 
-func (m *mockHeuristicEntity) Evaluate(processorIdentifier string, jobname string, values map[string]interface{}) domain.Evaluation {
+func (m *mockHeuristicEntity) Evaluate(processorIdentifier string, values ...interface{}) domain.EvaluationResult {
 	// Just return a fixed value for testing
-	return domain.Evaluation{
-		JobName: jobname,
-		Entries: []domain.EvaluationEntry{
+	return domain.EvaluationResult{
+		JobName: "test-job",
+		Results: []domain.EvaluationEntry{
 			{InstanceNumber: 1, Priority: 0.75},
 		},
 	}
@@ -179,7 +179,7 @@ func TestHeuristicEngineProcessorWithAlertNotification(t *testing.T) {
 			// If check passes, enforce the policy which will trigger notifications
 			processors := policy.HeuristicEngine().Processors()
 			for processorIdentifier := range processors {
-				err = policy.Enforce(processorIdentifier, "test-job", values)
+				err = policy.Enforce(processorIdentifier, "test-job")
 				if err != nil {
 					t.Logf("Error enforcing policy: %v", err)
 				}
@@ -284,7 +284,7 @@ func TestHeuristicEngineProcessorWithRouteNotification(t *testing.T) {
 			// If check passes, enforce the policy which will trigger notifications
 			processors := policy.HeuristicEngine().Processors()
 			for processorIdentifier := range processors {
-				err = policy.Enforce(processorIdentifier, "test-job", values)
+				err = policy.Enforce(processorIdentifier, "test-job")
 				if err != nil {
 					t.Logf("Error enforcing policy: %v", err)
 				}
@@ -418,7 +418,7 @@ func TestHeuristicEngineProcessorWithFallbackToRouteNotification(t *testing.T) {
 			// If check passes, enforce the policy which will trigger notifications
 			processors := policy.HeuristicEngine().Processors()
 			for processorIdentifier := range processors {
-				err = policy.Enforce(processorIdentifier, "test-job", values)
+				err = policy.Enforce(processorIdentifier, "test-job")
 				if err != nil {
 					t.Logf("Error enforcing policy: %v", err)
 				}
