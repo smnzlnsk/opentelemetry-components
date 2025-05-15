@@ -37,6 +37,30 @@ func newMQTTReceiver(cfg *Config, logger *zap.Logger, consumer consumer.Metrics)
 	opts.AddBroker(uri)
 	opts.SetClientID(cfg.ClientID)
 
+	// Set connection timeout
+	opts.SetConnectTimeout(30 * time.Second)
+
+	// Auto reconnect settings
+	opts.SetAutoReconnect(true)
+	opts.SetMaxReconnectInterval(5 * time.Minute)
+	opts.SetKeepAlive(30 * time.Second)
+
+	// Set clean session to false for persistent session
+	opts.SetCleanSession(false)
+
+	// Set handlers for connection events
+	opts.SetConnectionLostHandler(func(client mqtt.Client, err error) {
+		logger.Warn("MQTT connection lost", zap.Error(err))
+	})
+
+	opts.SetOnConnectHandler(func(client mqtt.Client) {
+		logger.Info("MQTT connection established")
+	})
+
+	opts.SetReconnectingHandler(func(client mqtt.Client, opts *mqtt.ClientOptions) {
+		logger.Info("MQTT attempting to reconnect")
+	})
+
 	client := mqtt.NewClient(opts)
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
 		return nil, token.Error()
@@ -52,7 +76,6 @@ func newMQTTReceiver(cfg *Config, logger *zap.Logger, consumer consumer.Metrics)
 		topicsMutex: &sync.RWMutex{},
 	}
 
-	r.RegisterTopic(r.config.Topic, r.handleMetrics)
 	return r, nil
 }
 
@@ -64,6 +87,8 @@ func (mr *mqttReceiver) Start(ctx context.Context, host component.Host) error {
 	}
 	mr.marshaler = marshaler
 	mr.host = host
+
+	mr.RegisterTopic(mr.config.Topic, mr.handleMetrics)
 
 	go func() {
 		<-ctx.Done()
@@ -77,7 +102,20 @@ func (mr *mqttReceiver) Shutdown(ctx context.Context) error {
 	if mr.cancel != nil {
 		mr.cancel()
 	}
-	mr.client.Disconnect(250)
+
+	// Unsubscribe from all topics before disconnecting
+	mr.topicsMutex.RLock()
+	for topic := range mr.topics {
+		token := mr.client.Unsubscribe(topic)
+		token.WaitTimeout(2 * time.Second)
+	}
+	mr.topicsMutex.RUnlock()
+
+	// Disconnect with a reasonable timeout
+	if mr.client.IsConnected() {
+		mr.client.Disconnect(1000) // 1 second timeout for disconnect
+	}
+
 	return nil
 }
 
