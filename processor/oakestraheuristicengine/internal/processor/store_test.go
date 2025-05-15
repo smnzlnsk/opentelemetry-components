@@ -90,11 +90,9 @@ func (m *mockProcessor) Evaluator() domain.Evaluator {
 	return nil
 }
 
-func (m *mockProcessor) Process(jobname string, params map[string]interface{}) domain.Evaluation {
-	return domain.Evaluation{
-		JobName: jobname,
-		Entries: []domain.EvaluationEntry{
-			{InstanceNumber: 1, Priority: 1.0},
-		},
+func (m *mockProcessor) Process(instanceNumber int, prev float64, params map[string]interface{}) domain.EvaluationEntry {
+	return domain.EvaluationEntry{
+		InstanceNumber: instanceNumber,
+		Priority:       prev,
 	}
 }

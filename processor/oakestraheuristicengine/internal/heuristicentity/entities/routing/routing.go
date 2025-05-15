@@ -6,30 +6,11 @@ import (
 	"math/rand/v2"
 
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/heuristicentity/entities/routing/evaluators"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/processor"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/wpt"
 	"go.uber.org/zap"
 )
-
-// dynamicRandomEvaluator implements interfaces.Evaluator for dynamic random values
-type dynamicRandomEvaluator struct {
-	identifier string
-}
-
-func newDynamicRandomEvaluator(identifier string) domain.Evaluator {
-	return &dynamicRandomEvaluator{
-		identifier: identifier,
-	}
-}
-
-func (d *dynamicRandomEvaluator) Identifier() string {
-	return d.identifier
-}
-
-func (d *dynamicRandomEvaluator) Evaluate(factor float64, params map[string]interface{}) float64 {
-	// Generate a new random value on each evaluation
-	return rand.Float64() * factor
-}
 
 type routingEntity struct {
 	services       domain.Services
@@ -47,17 +28,21 @@ func NewRoutingEntity(services domain.Services, logger *zap.Logger) domain.Heuri
 	builder := wpt.NewBuilder("true", 1, 0)
 	builder.Left("true", 0.5, 0)
 	builder.Right("false", 0, 0.5)
-	rrTree := builder.BuildTree("rr-tree", 1.0)
-	processorStore.Add(processor.NewProcessor("RR", rrTree))
-	processorStore.Add(processor.NewProcessor("default", rrTree))
+	_ = builder.BuildTree("rr-tree", 1.0)
 
 	// Random Processor (static - only generates random value at initialization)
 	builder = wpt.NewBuilder("true", rand.Float64(), 0)
 	processorStore.Add(processor.NewProcessor("static-random", builder.BuildTree("static-random-tree", 1.0)))
 
 	// Dynamic Random Processor (generates new random value on each evaluation)
-	dynamicRandomTree := newDynamicRandomEvaluator("dynamic-random-tree")
+	dynamicRandomTree := evaluators.NewDynamicRandomEvaluator("dynamic-random")
+	closestEvaluator := evaluators.NewClosestEvaluator("closest")
+	underutilizedEvaluator := evaluators.NewUnderutilizedEvaluator("underutilized")
+
 	processorStore.Add(processor.NewProcessor("random", dynamicRandomTree))
+	processorStore.Add(processor.NewProcessor("RR", dynamicRandomTree))
+	processorStore.Add(processor.NewProcessor("closest", closestEvaluator))
+	processorStore.Add(processor.NewProcessor("underutilized", underutilizedEvaluator))
 
 	return &routingEntity{
 		processorStore: processorStore,
@@ -87,7 +72,7 @@ func (r *routingEntity) Evaluate(processorIdentifier string, arguments ...interf
 	result := domain.EvaluationResult{
 		JobName: jobName,
 		Values:  make(map[string]map[string]interface{}),
-		Results: make([]domain.EvaluationEntry, len(instances)),
+		Results: make([]domain.EvaluationEntry, 0, len(instances)),
 	}
 
 	values, err := r.services.GetMetricsService().GetJobMetricsAsMap(
@@ -105,11 +90,19 @@ func (r *routingEntity) Evaluate(processorIdentifier string, arguments ...interf
 
 		result.Values[instanceName] = instanceValues
 
-		result.Results = append(result.Results, domain.EvaluationEntry{
+		evalResult := r.processorStore.Get(processorIdentifier).Process(instances[i].InstanceNumber, 1, instanceValues)
+		evalResult.IpType = processorIdentifier
+
+		result.Results = append(
+			result.Results,
+			evalResult,
+		)
+
+		/*domain.EvaluationEntry{
 			InstanceNumber: instances[i].InstanceNumber,
-			IpType:         jobRequest.IpType,
+			IpType:         processorIdentifier,
 			Priority:       r.processorStore.Get(processorIdentifier).Evaluator().Evaluate(1, instanceValues),
-		})
+		}*/
 	}
 
 	return result

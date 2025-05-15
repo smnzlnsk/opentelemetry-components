@@ -2,6 +2,6 @@ package domain
 
 type Processor interface {
 	Identifier() string
-	Process(appname string, params map[string]interface{}) Evaluation
+	Process(instanceNumber int, prev float64, params map[string]interface{}) EvaluationEntry
 	Evaluator() Evaluator
 }

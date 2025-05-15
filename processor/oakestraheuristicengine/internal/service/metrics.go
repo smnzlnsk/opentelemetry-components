@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
-	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.uber.org/zap"
 )
 
@@ -19,10 +18,6 @@ func NewMetricsService(repository domain.MetricsRepository, logger *zap.Logger) 
 		repository: repository,
 		logger:     logger,
 	}
-}
-
-func (s *metricsService) SaveMetrics(ctx context.Context, md pmetric.Metrics) error {
-	return s.repository.SaveMetrics(ctx, md)
 }
 
 func (s *metricsService) GetJobMetrics(ctx context.Context, jobName string) (domain.DBHostMetrics, error) {

@@ -8,11 +8,11 @@ type PolicyBuilder interface {
 	WithAlertCondition(condition string) PolicyBuilder
 	WithRouteCondition(condition string) PolicyBuilder
 	WithScheduleCondition(condition string) PolicyBuilder
-	WithRoute(measure NotificationInterface) PolicyBuilder
-	WithAlert(measure NotificationInterface) PolicyBuilder
-	WithSchedule(measure NotificationInterface) PolicyBuilder
+	WithRoute(measure NotificationInterface[any]) PolicyBuilder
+	WithAlert(measure NotificationInterface[any]) PolicyBuilder
+	WithSchedule(measure NotificationInterface[any]) PolicyBuilder
 	WithHeuristicEntity(entity HeuristicEntity) PolicyBuilder
-	NotificationInterfaceBuilder() NotificationInterfaceBuilder
+	NotificationInterfaceBuilder() NotificationInterfaceBuilder[any]
 	Build() Policy
 }
 
@@ -25,5 +25,5 @@ type Policy interface {
 	Capabilities() []NotificationInterfaceCapability
 	Name() string
 	HeuristicEngine() HeuristicEntity
-	NotificationInterface(capability NotificationInterfaceCapability) NotificationInterface
+	NotificationInterface(capability NotificationInterfaceCapability) NotificationInterface[any]
 }

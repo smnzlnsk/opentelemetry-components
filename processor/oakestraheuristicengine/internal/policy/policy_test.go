@@ -32,12 +32,12 @@ func (m *pmockHeuristicEntity) Evaluate(processorIdentifier string, options ...i
 
 // MockNotificationInterface implements interfaces.NotificationInterface
 type pmockNotificationInterface struct {
-	domain.NotificationInterface
+	domain.NotificationInterface[any]
 	notified bool
 	err      error
 }
 
-func (m *pmockNotificationInterface) Notify(notification interface{}) error {
+func (m *pmockNotificationInterface) Notify(notification any) error {
 	m.notified = true
 	return m.err
 }
@@ -72,7 +72,7 @@ func TestPolicy(t *testing.T) {
 			domain.NotificationInterfaceCapability_Alert,
 			domain.NotificationInterfaceCapability_Route,
 		},
-		notificationInterfaces: map[domain.NotificationInterfaceCapability]domain.NotificationInterface{
+		notificationInterfaces: map[domain.NotificationInterfaceCapability]domain.NotificationInterface[any]{
 			domain.NotificationInterfaceCapability_Alert: mockAlert,
 			domain.NotificationInterfaceCapability_Route: mockRoute,
 		},

@@ -25,11 +25,9 @@ func (p *processor) Evaluator() domain.Evaluator {
 	return p.evaluator
 }
 
-func (p *processor) Process(jobname string, params map[string]interface{}) domain.Evaluation {
-	return domain.Evaluation{
-		JobName: jobname,
-		Entries: []domain.EvaluationEntry{
-			{InstanceNumber: 1, Priority: p.evaluator.Evaluate(1, params)},
-		},
+func (p *processor) Process(instanceNumber int, prev float64, params map[string]interface{}) domain.EvaluationEntry {
+	return domain.EvaluationEntry{
+		InstanceNumber: instanceNumber,
+		Priority:       p.evaluator.Evaluate(prev, params),
 	}
 }

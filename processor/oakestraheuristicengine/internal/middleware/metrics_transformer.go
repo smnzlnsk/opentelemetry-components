@@ -54,81 +54,6 @@ func (t *metricsTransformer) ExtractHost(md pmetric.Metrics) string {
 	return host
 }
 
-// TransformToDBHostMetrics converts OpenTelemetry metrics to our DB format
-func (t *metricsTransformer) TransformToDBHostMetrics(md pmetric.Metrics) (domain.DBHostMetrics, error) {
-	// Get the host
-	host := t.ExtractHost(md)
-
-	hostMetrics := domain.DBHostMetrics{
-		Host:                   host,
-		SystemMetrics:          []domain.DBMetricDatapoint{},
-		ServiceInstanceMetrics: []domain.DBServiceInstanceMetrics{},
-	}
-
-	// Services map to track service metrics
-	serviceMap := make(map[string]*domain.DBServiceInstanceMetrics)
-
-	// Process all resource metrics
-	for i := 0; i < md.ResourceMetrics().Len(); i++ {
-		rm := md.ResourceMetrics().At(i)
-
-		// Extract service name from resource attributes
-		serviceName := ""
-		if svcAttr, ok := rm.Resource().Attributes().Get("service.name"); ok {
-			serviceName = svcAttr.Str()
-		}
-
-		jobName, instanceNumber := splitServiceName(serviceName)
-
-		// Process all scope metrics for this resource
-		for j := 0; j < rm.ScopeMetrics().Len(); j++ {
-			sm := rm.ScopeMetrics().At(j)
-
-			// Process all metrics in this scope
-			for k := 0; k < sm.Metrics().Len(); k++ {
-				metric := sm.Metrics().At(k)
-
-				// Skip non-gauge and non-sum metrics
-				if metric.Type() != pmetric.MetricTypeGauge && metric.Type() != pmetric.MetricTypeSum {
-					continue
-				}
-
-				// Extract datapoints
-				datapoint := t.extractDatapoint(metric)
-				if datapoint == nil {
-					continue
-				}
-
-				// Determine if this is a system metric or service metric
-				isSystemMetric := IsSystemMetric(metric.Name())
-
-				if isSystemMetric {
-					// Add to system metrics
-					hostMetrics.SystemMetrics = append(hostMetrics.SystemMetrics, *datapoint)
-				} else if serviceName != "" {
-					// Get or create service instance
-					serviceInstance, exists := serviceMap[serviceName]
-					if !exists {
-						// Create new service reference in map
-						hostMetrics.ServiceInstanceMetrics = append(hostMetrics.ServiceInstanceMetrics, domain.DBServiceInstanceMetrics{
-							JobName:        jobName,
-							InstanceNumber: instanceNumber,
-							Metrics:        []domain.DBMetricDatapoint{},
-						})
-						serviceInstance = &hostMetrics.ServiceInstanceMetrics[len(hostMetrics.ServiceInstanceMetrics)-1]
-						serviceMap[serviceName] = serviceInstance
-					}
-
-					// Add metric to service
-					serviceInstance.Metrics = append(serviceInstance.Metrics, *datapoint)
-				}
-			}
-		}
-	}
-
-	return hostMetrics, nil
-}
-
 // TransformDBHostMetricsToMap transforms DBHostMetrics to a MapHostMetrics
 func (t *metricsTransformer) TransformDBHostMetricsToMap(dbHostMetrics domain.DBHostMetrics) (domain.MapHostMetrics, error) {
 	hostMetrics := make(domain.MapHostMetrics)
@@ -310,29 +235,6 @@ func getValueFromDataPoint(dp pmetric.NumberDataPoint) float64 {
 	default:
 		return 0
 	}
-}
-
-// IsSystemMetric determines if a metric is a system metric based on its name
-func IsSystemMetric(metricName string) bool {
-	// Common prefixes for system metrics
-	systemPrefixes := []string{
-		"system.",
-		"host.",
-		"os.",
-		"cpu.",
-		"memory.",
-		"disk.",
-		"network.",
-		"process.",
-	}
-
-	for _, prefix := range systemPrefixes {
-		if len(metricName) >= len(prefix) && metricName[:len(prefix)] == prefix {
-			return true
-		}
-	}
-
-	return false
 }
 
 func splitServiceName(input string) (jobName string, instanceNum int) {

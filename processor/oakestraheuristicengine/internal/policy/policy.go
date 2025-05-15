@@ -11,7 +11,7 @@ import (
 type policy struct {
 	name                    string
 	capabilities            []domain.NotificationInterfaceCapability
-	notificationInterfaces  map[domain.NotificationInterfaceCapability]domain.NotificationInterface
+	notificationInterfaces  map[domain.NotificationInterfaceCapability]domain.NotificationInterface[any]
 	heuristicEntity         domain.HeuristicEntity
 	preEvaluationConditions []*govaluate.EvaluableExpression
 	evaluationConditions    []*govaluate.EvaluableExpression
@@ -69,9 +69,7 @@ func (p *policy) CheckEvaluationCondition(values map[string]interface{}) error {
 func (p *policy) CheckNotificationConditions(evaluationResult domain.EvaluationResult) error {
 	for _, result := range evaluationResult.Results {
 		instanceName := fmt.Sprintf("%s.instance.%d", evaluationResult.JobName, result.InstanceNumber)
-		fmt.Println(instanceName)
 		values := evaluationResult.Values[instanceName]
-		fmt.Println(evaluationResult.Values[instanceName])
 		values["result"] = result.Priority
 		for _, condition := range p.alertConditions {
 			result, err := condition.Evaluate(values)
@@ -79,6 +77,7 @@ func (p *policy) CheckNotificationConditions(evaluationResult domain.EvaluationR
 				return err
 			}
 			if result == true {
+				evaluationResult.Values = nil
 				return p.NotificationInterface(domain.NotificationInterfaceCapability_Alert).Notify(evaluationResult)
 			}
 		}
@@ -89,6 +88,7 @@ func (p *policy) CheckNotificationConditions(evaluationResult domain.EvaluationR
 				return err
 			}
 			if result == true {
+				evaluationResult.Values = nil
 				return p.NotificationInterface(domain.NotificationInterfaceCapability_Route).Notify(evaluationResult)
 			}
 		}
@@ -99,6 +99,7 @@ func (p *policy) CheckNotificationConditions(evaluationResult domain.EvaluationR
 				return err
 			}
 			if result == true {
+				evaluationResult.Values = nil
 				return p.NotificationInterface(domain.NotificationInterfaceCapability_Schedule).Notify(evaluationResult)
 			}
 		}
@@ -122,6 +123,6 @@ func (p *policy) HeuristicEngine() domain.HeuristicEntity {
 	return p.heuristicEntity
 }
 
-func (p *policy) NotificationInterface(capability domain.NotificationInterfaceCapability) domain.NotificationInterface {
+func (p *policy) NotificationInterface(capability domain.NotificationInterfaceCapability) domain.NotificationInterface[any] {
 	return p.notificationInterfaces[capability]
 }

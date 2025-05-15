@@ -14,9 +14,9 @@ type policyBuilder struct {
 	alertConditions              []*govaluate.EvaluableExpression
 	routeConditions              []*govaluate.EvaluableExpression
 	scheduleConditions           []*govaluate.EvaluableExpression
-	notificationInterfaceBuilder domain.NotificationInterfaceBuilder
+	notificationInterfaceBuilder domain.NotificationInterfaceBuilder[any]
 	capabilities                 []domain.NotificationInterfaceCapability
-	notificationInterfaces       map[domain.NotificationInterfaceCapability]domain.NotificationInterface
+	notificationInterfaces       map[domain.NotificationInterfaceCapability]domain.NotificationInterface[any]
 	heuristicEntity              domain.HeuristicEntity
 }
 
@@ -24,8 +24,8 @@ var _ domain.PolicyBuilder = &policyBuilder{}
 
 func NewPolicyBuilder() domain.PolicyBuilder {
 	return &policyBuilder{
-		notificationInterfaceBuilder: notification_interface.NewNotificationInterfaceBuilder(),
-		notificationInterfaces:       make(map[domain.NotificationInterfaceCapability]domain.NotificationInterface),
+		notificationInterfaceBuilder: notification_interface.NewNotificationInterfaceBuilder[any](),
+		notificationInterfaces:       make(map[domain.NotificationInterfaceCapability]domain.NotificationInterface[any]),
 	}
 }
 
@@ -60,7 +60,7 @@ func (b *policyBuilder) WithEvaluationCondition(condition string) domain.PolicyB
 	return b
 }
 
-func (b *policyBuilder) WithRoute(measure domain.NotificationInterface) domain.PolicyBuilder {
+func (b *policyBuilder) WithRoute(measure domain.NotificationInterface[any]) domain.PolicyBuilder {
 	if b.notificationInterfaces[domain.NotificationInterfaceCapability_Route] != nil {
 		return b
 	}
@@ -81,7 +81,7 @@ func (b *policyBuilder) WithRouteCondition(condition string) domain.PolicyBuilde
 	return b
 }
 
-func (b *policyBuilder) WithAlert(measure domain.NotificationInterface) domain.PolicyBuilder {
+func (b *policyBuilder) WithAlert(measure domain.NotificationInterface[any]) domain.PolicyBuilder {
 	if b.notificationInterfaces[domain.NotificationInterfaceCapability_Alert] != nil {
 		return b
 	}
@@ -102,7 +102,7 @@ func (b *policyBuilder) WithAlertCondition(condition string) domain.PolicyBuilde
 	return b
 }
 
-func (b *policyBuilder) WithSchedule(measure domain.NotificationInterface) domain.PolicyBuilder {
+func (b *policyBuilder) WithSchedule(measure domain.NotificationInterface[any]) domain.PolicyBuilder {
 	if b.notificationInterfaces[domain.NotificationInterfaceCapability_Schedule] != nil {
 		return b
 	}
@@ -153,7 +153,7 @@ func (b *policyBuilder) Build() domain.Policy {
 		return nil
 	}
 
-	// verify, if notification interfaces are set, then at least one condition is set
+	// Verify, if a notification interface is set, then at least one condition has to be present
 	if _, ok := b.notificationInterfaces[domain.NotificationInterfaceCapability_Alert]; ok {
 		if len(b.alertConditions) == 0 {
 			return nil
@@ -187,7 +187,7 @@ func (b *policyBuilder) Build() domain.Policy {
 	// Reset internal state
 	b.name = ""
 	b.capabilities = nil
-	b.notificationInterfaces = make(map[domain.NotificationInterfaceCapability]domain.NotificationInterface)
+	b.notificationInterfaces = make(map[domain.NotificationInterfaceCapability]domain.NotificationInterface[any])
 	b.heuristicEntity = nil
 	b.preEvaluationConditions = nil
 	b.evaluationConditions = nil
@@ -198,6 +198,6 @@ func (b *policyBuilder) Build() domain.Policy {
 	return policy
 }
 
-func (b *policyBuilder) NotificationInterfaceBuilder() domain.NotificationInterfaceBuilder {
+func (b *policyBuilder) NotificationInterfaceBuilder() domain.NotificationInterfaceBuilder[any] {
 	return b.notificationInterfaceBuilder
 }

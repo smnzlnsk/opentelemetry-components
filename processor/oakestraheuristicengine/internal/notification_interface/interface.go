@@ -9,17 +9,19 @@ import (
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
-type notificationInterface struct {
+type notificationInterface[T any] struct {
 	capability domain.NotificationInterfaceCapability
 	host       string
 	port       int
 	endpoint   string
 }
 
-func (n *notificationInterface) Notify(notification interface{}) error {
+var _ domain.NotificationInterface[any] = (*notificationInterface[any])(nil)
+
+func (n *notificationInterface[T]) Notify(notification T) error {
 	jsonData := map[string]interface{}{
-		n.capability.String(): "true",
-		"message":             "test",
+		"type":         n.capability.String(),
+		"notification": notification,
 	}
 
 	data, err := json.Marshal(jsonData)
@@ -45,6 +47,6 @@ func (n *notificationInterface) Notify(notification interface{}) error {
 	return nil
 }
 
-func (n *notificationInterface) Type() domain.NotificationInterfaceCapability {
+func (n *notificationInterface[T]) Type() domain.NotificationInterfaceCapability {
 	return n.capability
 }

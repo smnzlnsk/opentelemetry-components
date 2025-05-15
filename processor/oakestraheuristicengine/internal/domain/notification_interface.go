@@ -18,24 +18,20 @@ func (c NotificationInterfaceCapability) String() string {
 	}[c]
 }
 
-type NotificationInterfaceFactory interface {
-	CreateNotificationInterfaceBuilder(interfaceType NotificationInterfaceCapability) NotificationInterfaceBuilder
-}
-
-type NotificationInterfaceBuilder interface {
-	WithHost(host string) NotificationInterfaceBuilder
-	WithPort(port int) NotificationInterfaceBuilder
-	WithEndpoint(endpoint string) NotificationInterfaceBuilder
-	WithCapability(capability NotificationInterfaceCapability) NotificationInterfaceBuilder
-	Build() NotificationInterface
+type NotificationInterfaceBuilder[T any] interface {
+	WithHost(host string) NotificationInterfaceBuilder[T]
+	WithPort(port int) NotificationInterfaceBuilder[T]
+	WithEndpoint(endpoint string) NotificationInterfaceBuilder[T]
+	WithCapability(capability NotificationInterfaceCapability) NotificationInterfaceBuilder[T]
+	Build() NotificationInterface[T]
 }
 
 type NotificationInterfaceRegistry interface {
-	Register(notification NotificationInterface)
-	Get(name NotificationInterfaceCapability) NotificationInterface
+	Register(notification NotificationInterface[any])
+	Get(name NotificationInterfaceCapability) NotificationInterface[any]
 }
 
-type NotificationInterface interface {
-	Notify(notification interface{}) error
+type NotificationInterface[T any] interface {
+	Notify(notification T) error
 	Type() NotificationInterfaceCapability
 }

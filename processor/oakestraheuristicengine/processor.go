@@ -33,11 +33,7 @@ type heuristicEngineProcessor struct {
 	services domain.Services
 
 	// policies
-	policies              map[string]domain.Policy
-	policyToEngineMapping map[string]domain.HeuristicEntity
-
-	// registry of notification interfaces
-	notificationInterfaceRegistry domain.NotificationInterfaceRegistry
+	policies map[string]domain.Policy
 
 	// collection of active entities
 	activeEntities map[domain.HeuristicType]domain.HeuristicEntity
@@ -50,14 +46,12 @@ type heuristicEngineProcessor struct {
 
 func newProcessor(config *Config, set processor.Settings, next consumer.Metrics) (*heuristicEngineProcessor, error) {
 	return &heuristicEngineProcessor{
-		config:                        config,
-		nextConsumer:                  next,
-		logger:                        set.Logger,
-		policies:                      make(map[string]domain.Policy),
-		policyToEngineMapping:         make(map[string]domain.HeuristicEntity),
-		notificationInterfaceRegistry: notification_interface.NewNotificationInterfaceRegistry(set.Logger),
-		activeEntities:                make(map[domain.HeuristicType]domain.HeuristicEntity),
-		availableEntities:             []domain.HeuristicType{},
+		config:            config,
+		nextConsumer:      next,
+		logger:            set.Logger,
+		policies:          make(map[string]domain.Policy),
+		activeEntities:    make(map[domain.HeuristicType]domain.HeuristicEntity),
+		availableEntities: []domain.HeuristicType{},
 
 		// created on Start
 		httpServer:    nil,
@@ -67,15 +61,7 @@ func newProcessor(config *Config, set processor.Settings, next consumer.Metrics)
 }
 
 // ConsumeMetrics is called when the processor receives metrics
-// it saves the metrics to history for later use
 func (p *heuristicEngineProcessor) ConsumeMetrics(ctx context.Context, md pmetric.Metrics) error {
-
-	// save metrics to database
-	err := p.services.GetMetricsService().SaveMetrics(ctx, md)
-	if err != nil {
-		p.logger.Error("failed to save metrics to database", zap.Error(err))
-	}
-
 	return p.nextConsumer.ConsumeMetrics(ctx, md)
 }
 
@@ -120,72 +106,40 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 
 	// initialize policies
 	policyBuilder := policy.NewPolicyBuilder()
-	notificationInterfaceBuilder := notification_interface.NewNotificationInterfaceBuilder()
+
+	routingNotificationInterfaceBuilder := notification_interface.NewNotificationInterfaceBuilder[any]()
 
 	// define notifiers
-	/*routeNotifier := notificationInterfaceBuilder.
-	WithHost("localhost").
-	WithPort(8080).
-	WithEndpoint("/route").
-	WithCapability(domain.NotificationInterfaceCapability_Route).
-	Build()*/
-
-	alertNotifier := notificationInterfaceBuilder.
+	alertNotifier := routingNotificationInterfaceBuilder.
 		WithHost("localhost").
 		WithPort(p.config.ServiceManager.Port).
 		WithEndpoint("/api/net/routing/alert").
 		WithCapability(domain.NotificationInterfaceCapability_Alert).
 		Build()
 
-	routingNotifier := notificationInterfaceBuilder.
+	routingNotifier := routingNotificationInterfaceBuilder.
 		WithHost("localhost").
 		WithPort(p.config.ServiceManager.Port).
 		WithEndpoint("/api/net/routing/update").
 		WithCapability(domain.NotificationInterfaceCapability_Route).
 		Build()
 
-	// Define policy configurations with their associated heuristic engine types
-	policyConfigs := []struct {
-		name             string
-		engineType       domain.HeuristicType
-		alertNotifier    domain.NotificationInterface
-		routeNotifier    domain.NotificationInterface
-		scheduleNotifier domain.NotificationInterface
-	}{
-		{
-			name:             "routing",
-			engineType:       domain.RoutingEntity,
-			alertNotifier:    alertNotifier,
-			routeNotifier:    routingNotifier,
-			scheduleNotifier: nil,
-		},
-		// Add more policy configurations here
+	// Verify that the routing heuristic engine exists
+	engine, exists := p.activeEntities[domain.RoutingEntity]
+	if !exists {
+		return fmt.Errorf("heuristic engine %v not found for policy %s", domain.RoutingEntity, "routing")
 	}
 
-	// Build and register policies with their associated engines
-	for _, cfg := range policyConfigs {
-		// Verify that the heuristic engine exists
-		engine, exists := p.activeEntities[cfg.engineType]
-		if !exists {
-			return fmt.Errorf("heuristic engine %v not found for policy %s", cfg.engineType, cfg.name)
-		}
-
-		// Build policy with its notifiers and associated engine
-		policy := policyBuilder.
-			WithName(cfg.name).
-			WithPreEvaluationCondition("true").
-			WithEvaluationCondition("true").
-			WithHeuristicEngine(engine).
-			WithAlert(cfg.alertNotifier).
-			WithAlertCondition("true").
-			WithRoute(cfg.routeNotifier).
-			WithRouteCondition("true").
-			Build()
-
-		// Register policy and its engine mapping
-		p.policies[policy.Name()] = policy
-		p.policyToEngineMapping[policy.Name()] = engine
-	}
+	p.policies["routing"] = policyBuilder.
+		WithName("routing").
+		WithPreEvaluationCondition("true").
+		WithEvaluationCondition("true").
+		WithHeuristicEngine(engine).
+		WithAlert(alertNotifier).
+		WithAlertCondition("true").
+		WithRoute(routingNotifier).
+		WithRouteCondition("true").
+		Build()
 
 	// setup http server if enabled
 	if p.config.HTTPServer.Enabled {
@@ -200,6 +154,7 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 		}
 	}
 
+	p.logger.Info("Processor started")
 	return nil
 }
 

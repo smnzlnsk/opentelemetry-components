@@ -117,10 +117,6 @@ func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	fmt.Println(requestBody)
-
-	instances := requestBody.JobData.ServiceInstanceList
-
 	// Extract the routing policy from the URL path
 	path := strings.TrimPrefix(r.URL.Path, "/policy/")
 	if path == "" {
@@ -153,21 +149,27 @@ func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 	// Get the processor from the policy
 	processors := policy.HeuristicEngine().Processors()
 
-	// Check if a specific processor was requested
-	var exists bool
+	var processorsToEnforce []string
 
 	if processorName != "" {
 		// Check if specified processor exists
-		_, exists = processors[processorName]
+		_, exists := processors[processorName]
 		if !exists {
 			http.Error(w, fmt.Sprintf("Processor '%s' not found", processorName), http.StatusNotFound)
 			return
 		}
+		processorsToEnforce = []string{processorName}
 	} else {
-		// Default to "routing" processor if none specified
-		_, exists = processors["default"]
-		if !exists {
-			http.Error(w, "Processor not found", http.StatusNotFound)
+		// Default to processing all processors, if none specified
+		for name := range processors {
+			processorsToEnforce = append(processorsToEnforce, name)
+		}
+	}
+
+	// Enforce policies on all selected processors
+	for _, name := range processorsToEnforce {
+		if err := policy.Enforce(name, requestBody); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
@@ -189,28 +191,5 @@ func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 		}
 	*/
 
-	err := policy.Enforce(processorName, requestBody)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Generate response directly to avoid JSON escaping issues
-	w.Header().Set("Content-Type", "application/json")
-
-	// Marshal the instances array directly to bytes
-	instancesJSON, err := json.Marshal(instances)
-	if err != nil {
-		http.Error(w, "Failed to marshal instances: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	fmt.Println(instances)
-
-	fmt.Println(string(instancesJSON))
-	// Write response manually
-	fmt.Fprintf(w, `{"policy":"%s","processor":"%s","result":%s}`,
-		policy.Name(),
-		processorName,
-		string(instancesJSON))
+	http.Error(w, "ok", http.StatusOK)
 }
