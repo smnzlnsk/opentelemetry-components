@@ -21,6 +21,13 @@ func NewResourceBuilder(rac ResourceAttributesConfig) *ResourceBuilder {
 	}
 }
 
+// SetContainerID sets provided value as "container_id" attribute.
+func (rb *ResourceBuilder) SetContainerID(val string) {
+	if rb.config.ContainerID.Enabled {
+		rb.res.Attributes().PutStr("container_id", val)
+	}
+}
+
 // SetServiceName sets provided value as "service.name" attribute.
 func (rb *ResourceBuilder) SetServiceName(val string) {
 	if rb.config.ServiceName.Enabled {

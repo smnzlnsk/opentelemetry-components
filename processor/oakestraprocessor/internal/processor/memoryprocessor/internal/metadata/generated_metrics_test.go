@@ -73,6 +73,7 @@ func TestMetricsBuilder(t *testing.T) {
 			mb.RecordServiceMemoryUtilisationDataPoint(ts, 1, AttributeStateUsed)
 
 			rb := mb.NewResourceBuilder()
+			rb.SetContainerID("container_id-val")
 			rb.SetServiceName("service.name-val")
 			res := rb.Emit()
 			metrics := mb.Emit(WithResource(res))

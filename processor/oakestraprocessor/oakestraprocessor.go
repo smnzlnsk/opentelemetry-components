@@ -6,6 +6,7 @@ import (
 
 	pb "github.com/smnzlnsk/monitoring-proto-lib/gen/go/monitoring_proto_lib/monitoring/v1"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/persistence/mongodb"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/repository"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/service"
@@ -26,7 +27,7 @@ type MultiProcessor struct {
 	grpcServer    Server
 	mongodbClient *mongodb.Client
 	config        *Config
-	services      *service.Services
+	services      domain.Services
 }
 
 func newMultiProcessor(ctx context.Context, set processor.Settings, cfg *Config, next consumer.Metrics) *MultiProcessor {
@@ -65,7 +66,7 @@ func createProcessors(
 	set processor.Settings,
 	config *Config,
 	factories map[string]internal.ProcessorFactory,
-	services *service.Services,
+	services domain.Services,
 ) ([]internal.MetricProcessor, error) {
 
 	processors := make([]internal.MetricProcessor, 0, len(config.Processors))
@@ -86,7 +87,7 @@ func createProcessor(
 	cfg internal.Config,
 	key string,
 	factories map[string]internal.ProcessorFactory,
-	services *service.Services,
+	services domain.Services,
 ) (internal.MetricProcessor, error) {
 	factory := factories[key]
 	if factory == nil {
@@ -157,6 +158,12 @@ func (p *MultiProcessor) ConsumeMetrics(ctx context.Context, metrics pmetric.Met
 			p.logger.Error("error", zap.Error(err))
 			return err
 		}
+	}
+
+	// save metrics to database
+	err := p.services.GetMetricsService().SaveMetrics(ctx, metrics)
+	if err != nil {
+		p.logger.Error("failed to save metrics to database", zap.Error(err))
 	}
 
 	return p.next.ConsumeMetrics(ctx, metrics)

@@ -1,4 +1,4 @@
-package internal
+package domain
 
 import (
 	"fmt"
@@ -115,7 +115,7 @@ func TestMetricFilterStruct(t *testing.T) {
 
 func TestFilter(t *testing.T) {
 	t.Run("new filter initialization", func(t *testing.T) {
-		f := newFilter()
+		f := NewFilter()
 		if f.MetricFilters == nil {
 			t.Error("MetricFilters map was not initialized")
 		}
@@ -125,7 +125,7 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("add new metric filter", func(t *testing.T) {
-		f := newFilter()
+		f := NewFilter()
 		states := map[string]bool{"running": true, "stopped": true}
 
 		err := f.AddMetricFilter("cpu_usage", states)
@@ -153,7 +153,7 @@ func TestFilter(t *testing.T) {
 
 	t.Run("delete metric filter", func(t *testing.T) {
 		t.Run("delete single state", func(t *testing.T) {
-			f := newFilter()
+			f := NewFilter()
 			states := map[string]bool{"running": true, "stopped": true}
 
 			err := f.AddMetricFilter("cpu_usage", states)
@@ -183,7 +183,7 @@ func TestFilter(t *testing.T) {
 		})
 
 		t.Run("delete non-existent metric", func(t *testing.T) {
-			f := newFilter()
+			f := NewFilter()
 			err := f.DeleteMetricFilter("nonexistent", map[string]bool{"running": true})
 			if err != nil {
 				t.Errorf("Failed to handle non-existent metric deletion: %v", err)
@@ -194,7 +194,7 @@ func TestFilter(t *testing.T) {
 
 func BenchmarkFilter(b *testing.B) {
 	b.Run("add new metric filter", func(b *testing.B) {
-		f := newFilter()
+		f := NewFilter()
 		states := map[string]bool{"running": true, "stopped": true}
 
 		b.ResetTimer()
@@ -205,7 +205,7 @@ func BenchmarkFilter(b *testing.B) {
 	})
 
 	b.Run("update existing metric filter", func(b *testing.B) {
-		f := newFilter()
+		f := NewFilter()
 		states := map[string]bool{"running": true}
 		_ = f.AddMetricFilter("cpu_usage", states)
 
@@ -289,7 +289,7 @@ func BenchmarkFilterScenarios(b *testing.B) {
 
 	for _, scenario := range scenarios {
 		b.Run(scenario.name, func(b *testing.B) {
-			f := newFilter()
+			f := NewFilter()
 			states := make(map[string]bool)
 			for i := 0; i < scenario.statesPerCall; i++ {
 				states[fmt.Sprintf("state_%d", i)] = true

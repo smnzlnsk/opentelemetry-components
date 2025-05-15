@@ -130,6 +130,12 @@ func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.Settings, opt
 		resourceAttributeIncludeFilter: make(map[string]filter.Filter),
 		resourceAttributeExcludeFilter: make(map[string]filter.Filter),
 	}
+	if mbc.ResourceAttributes.ContainerID.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["container_id"] = filter.CreateFilter(mbc.ResourceAttributes.ContainerID.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.ContainerID.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["container_id"] = filter.CreateFilter(mbc.ResourceAttributes.ContainerID.MetricsExclude)
+	}
 	if mbc.ResourceAttributes.ServiceName.MetricsInclude != nil {
 		mb.resourceAttributeIncludeFilter["service.name"] = filter.CreateFilter(mbc.ResourceAttributes.ServiceName.MetricsInclude)
 	}

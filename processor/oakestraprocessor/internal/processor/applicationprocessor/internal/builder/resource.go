@@ -11,6 +11,7 @@ type ResourceBuilder struct {
 
 func (rb *ResourceBuilder) SetServiceName(name string) *ResourceBuilder {
 	rb.resource.Resource().Attributes().PutStr("service.name", name)
+	rb.resource.Resource().Attributes().PutStr("container_id", name)
 	return rb
 }
 

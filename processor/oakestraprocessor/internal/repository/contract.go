@@ -11,25 +11,12 @@ import (
 	"go.uber.org/zap"
 )
 
-type ContractRepository interface {
-	Create(ctx context.Context, contract domain.CalculationContract) error
-	Update(ctx context.Context, old domain.CalculationContract, new domain.CalculationContract) error
-	DeleteFormula(ctx context.Context, contract domain.CalculationContract) error
-	DeleteContract(ctx context.Context, service string) error
-}
-
 type contractRepository struct {
 	collection *mongo.Collection
 	logger     *zap.Logger
 }
 
-// ContractDocument represents the MongoDB document structure
-type ContractDocument struct {
-	Service  string                       `bson:"service"`
-	Formulas []domain.CalculationContract `bson:"formulas"`
-}
-
-func NewContractRepository(collection *mongo.Collection, logger *zap.Logger) ContractRepository {
+func NewContractRepository(collection *mongo.Collection, logger *zap.Logger) domain.ContractRepository {
 	return &contractRepository{
 		collection: collection,
 		logger:     logger,
@@ -47,12 +34,12 @@ func (r *contractRepository) Create(ctx context.Context, contract domain.Calcula
 	}
 
 	// Check if formula already exists in the document
-	var existingDoc ContractDocument
+	var existingDoc domain.ContractDocument
 	err := r.collection.FindOne(ctx, filter).Decode(&existingDoc)
 
 	// If document exists, check if formula is already in the array
 	if err == nil {
-		for _, existingContract := range existingDoc.Formulas {
+		for _, existingContract := range existingDoc.Contracts {
 			if existingContract.Formula == contract.Formula {
 				r.logger.Info("Formula already exists for this service, skipping",
 					zap.String("service", contract.Service),
@@ -68,7 +55,7 @@ func (r *contractRepository) Create(ctx context.Context, contract domain.Calcula
 	// Add formula to the array using $addToSet (to avoid duplicates)
 	update := bson.M{
 		"$addToSet": bson.M{
-			"formulas": contract,
+			"contracts": contract,
 		},
 	}
 
@@ -99,7 +86,7 @@ func (r *contractRepository) Update(ctx context.Context, old domain.CalculationC
 	filter := bson.M{"service": old.Service}
 
 	// First check if the document exists
-	var existingDoc ContractDocument
+	var existingDoc domain.ContractDocument
 	err := r.collection.FindOne(ctx, filter).Decode(&existingDoc)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -110,7 +97,7 @@ func (r *contractRepository) Update(ctx context.Context, old domain.CalculationC
 
 	// Check if the old formula exists
 	formulaExists := false
-	for _, existingContract := range existingDoc.Formulas {
+	for _, existingContract := range existingDoc.Contracts {
 		if existingContract.Formula == old.Formula {
 			formulaExists = true
 			break
@@ -124,7 +111,7 @@ func (r *contractRepository) Update(ctx context.Context, old domain.CalculationC
 	// Remove the old formula
 	update := bson.M{
 		"$pull": bson.M{
-			"formulas": bson.M{"formula": old.Formula},
+			"contracts": bson.M{"formula": old.Formula},
 		},
 	}
 
@@ -136,7 +123,7 @@ func (r *contractRepository) Update(ctx context.Context, old domain.CalculationC
 	// Add the new formula
 	update = bson.M{
 		"$addToSet": bson.M{
-			"formulas": new,
+			"contracts": new,
 		},
 	}
 
@@ -160,7 +147,7 @@ func (r *contractRepository) DeleteFormula(ctx context.Context, contract domain.
 	// Remove the specific formula from the array
 	update := bson.M{
 		"$pull": bson.M{
-			"formulas": bson.M{"formula": contract.Formula},
+			"contracts": bson.M{"formula": contract.Formula},
 		},
 	}
 
@@ -174,14 +161,14 @@ func (r *contractRepository) DeleteFormula(ctx context.Context, contract domain.
 	}
 
 	// Check if the formulas array is now empty, if so, consider removing the document
-	var doc ContractDocument
+	var doc domain.ContractDocument
 	err = r.collection.FindOne(ctx, filter).Decode(&doc)
 	if err != nil {
 		return err
 	}
 
-	if len(doc.Formulas) == 0 {
-		r.logger.Info("No formulas left for service, removing document",
+	if len(doc.Contracts) == 0 {
+		r.logger.Info("No contracts left for service, removing document",
 			zap.String("service", contract.Service))
 		_, err = r.collection.DeleteOne(ctx, filter)
 		if err != nil {
@@ -214,4 +201,41 @@ func (r *contractRepository) DeleteContract(ctx context.Context, service string)
 		zap.String("service", service))
 
 	return nil
+}
+
+func (r *contractRepository) GetContractsForProcessor(ctx context.Context, processor string) ([]domain.ContractDocument, error) {
+	// Create a projection to filter contracts by processor
+	projection := bson.D{
+		{Key: "$project", Value: bson.D{
+			{Key: "service", Value: 1},
+			{Key: "contracts", Value: bson.D{
+				{Key: "$filter", Value: bson.D{
+					{Key: "input", Value: "$contracts"},
+					{Key: "as", Value: "contract"},
+					{Key: "cond", Value: bson.D{
+						{Key: "$eq", Value: bson.A{"$$contract.processor", processor}},
+					}},
+				}},
+			}},
+		}},
+	}
+
+	// Execute the aggregation directly with the projection
+	cursor, err := r.collection.Aggregate(ctx, mongo.Pipeline{projection})
+	if err != nil {
+		r.logger.Error("Failed to execute aggregation for processor",
+			zap.String("processor", processor),
+			zap.Error(err))
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	// Decode the results
+	var result []domain.ContractDocument
+	if err := cursor.All(ctx, &result); err != nil {
+		r.logger.Error("Failed to decode contracts", zap.Error(err))
+		return nil, err
+	}
+
+	return result, nil
 }

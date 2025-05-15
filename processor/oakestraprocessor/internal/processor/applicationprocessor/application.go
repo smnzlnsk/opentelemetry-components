@@ -6,8 +6,8 @@ import (
 
 	pb "github.com/smnzlnsk/monitoring-proto-lib/gen/go/monitoring_proto_lib/monitoring/v1"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/applicationprocessor/internal/builder"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/service"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/processor"
@@ -15,13 +15,13 @@ import (
 )
 
 type ApplicationMetricProcessor struct {
-	contracts          *internal.ContractState // create a per-service map of calculation contracts
+	contracts          *domain.ContractState // create a per-service map of calculation contracts
 	formulaToMetricMap *FormulaToMetricMap
 	config             *Config
 	logger             *zap.Logger
 	cancel             context.CancelFunc
 	mb                 *builder.MetricsBuilder
-	services           *service.Services
+	services           domain.Services
 }
 
 var _ internal.MetricProcessor = (*ApplicationMetricProcessor)(nil)
@@ -73,6 +73,10 @@ func (c *ApplicationMetricProcessor) Shutdown(ctx context.Context) error {
 
 func (c *ApplicationMetricProcessor) Start(ctx context.Context, _ component.Host) error {
 	_, c.cancel = context.WithCancel(ctx)
+
+	// sync contracts
+	c.contracts.Sync()
+
 	c.logger.Info("Started Application Processor")
 	return nil
 }
@@ -81,10 +85,10 @@ func newApplicationMetricProcessor(
 	_ context.Context,
 	set processor.Settings,
 	cfg internal.Config,
-	services *service.Services,
+	services domain.Services,
 ) (internal.MetricProcessor, error) {
 	return &ApplicationMetricProcessor{
-		contracts:          internal.NewContractState(),
+		contracts:          domain.NewContractState(TypeStr, set.Logger, services.GetContractService()),
 		formulaToMetricMap: NewFormulaToMetricMap(),
 		config:             cfg.(*Config),
 		logger:             set.Logger,
@@ -95,7 +99,7 @@ func newApplicationMetricProcessor(
 
 func (c *ApplicationMetricProcessor) RegisterService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo, calculationRequests []*pb.CalculationRequest) error {
 	formattedServiceName := fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber)
-	contracts := internal.NewCalculationContractsFromProto(formattedServiceName, calculationRequests)
+	contracts := domain.NewCalculationContractsFromProto(formattedServiceName, calculationRequests)
 
 	// register service in internal contract state
 	err := c.contracts.RegisterService(formattedServiceName, contracts, "1") // INFO: no normalization is to be done for application processor, so we set it to 1 (for now)
@@ -105,7 +109,7 @@ func (c *ApplicationMetricProcessor) RegisterService(serviceName string, instanc
 
 	// notify contract service to create contracts
 	ctx := context.Background()
-	err = c.services.ContractService.CreateMany(ctx, internal.FlattenMap(contracts))
+	err = c.services.GetContractService().CreateMany(ctx, internal.FlattenMap(contracts))
 	if err != nil {
 		return err
 	}
@@ -122,7 +126,7 @@ func (c *ApplicationMetricProcessor) DeleteService(serviceName string, instanceN
 
 	// notify contract service to delete contracts
 	ctx := context.Background()
-	c.services.ContractService.DeleteContract(ctx, formattedServiceName)
+	c.services.GetContractService().DeleteContract(ctx, formattedServiceName)
 
 	c.formulaToMetricMap.DeleteMetric(formattedServiceName)
 

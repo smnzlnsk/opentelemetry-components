@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/cpuprocessor/internal/metadata"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/service"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/processor"
 )
@@ -30,7 +30,7 @@ func (f *Factory) CreateMetricsProcessor(
 	ctx context.Context,
 	set processor.Settings,
 	cfg internal.Config,
-	services *service.Services,
+	services domain.Services,
 ) (internal.MetricProcessor, error) {
 	return newCPUMetricProcessor(ctx, set, cfg, services)
 }

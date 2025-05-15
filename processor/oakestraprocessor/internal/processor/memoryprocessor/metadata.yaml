@@ -8,6 +8,11 @@ resource_attributes:
     type: string
     enabled: true
 
+  container_id:
+    description: container id, which is the full service instance identifier
+    type: string
+    enabled: true
+
 attributes:
   state:
     description: recorded states

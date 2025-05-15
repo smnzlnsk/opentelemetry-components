@@ -32,4 +32,5 @@ percentage of total memory used by service in certain state
 
 | Name | Description | Values | Enabled |
 | ---- | ----------- | ------ | ------- |
+| container_id | container id, which is the full service instance identifier | Any Str | true |
 | service.name | service name | Any Str | true |

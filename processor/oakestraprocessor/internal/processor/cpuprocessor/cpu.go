@@ -9,7 +9,6 @@ import (
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/cpuprocessor/internal/metadata"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/service"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -19,13 +18,13 @@ import (
 )
 
 type CPUMetricProcessor struct {
-	contracts *internal.ContractState // create a per-service map of calculation contracts
+	contracts *domain.ContractState // create a per-service map of calculation contracts
 	config    *Config
 	logger    *zap.Logger
 	cancel    context.CancelFunc
 	settings  processor.Settings
 	mb        *metadata.MetricsBuilder
-	services  *service.Services
+	services  domain.Services
 }
 
 var _ internal.MetricProcessor = (*CPUMetricProcessor)(nil)
@@ -45,6 +44,7 @@ func (c *CPUMetricProcessor) processMetrics(metrics pmetric.Metrics) (pmetric.Me
 	// setup new calculation mechanism
 	err := c.contracts.PopulateData(metrics)
 	if err != nil {
+		c.logger.Error("Failed to populate data in cpu processor", zap.Error(err))
 		return metrics, err
 	}
 
@@ -53,7 +53,7 @@ func (c *CPUMetricProcessor) processMetrics(metrics pmetric.Metrics) (pmetric.Me
 	for key, value := range results {
 		rb := c.mb.NewResourceBuilder()
 		rb.SetServiceName(key.Service)
-
+		rb.SetContainerID(key.Service)
 		c.mb.RecordServiceCPUUtilisationDataPoint(
 			pcommon.NewTimestampFromTime(time.Now()),
 			value,
@@ -77,14 +77,21 @@ func (c *CPUMetricProcessor) Shutdown(_ context.Context) error {
 func (c *CPUMetricProcessor) Start(ctx context.Context, _ component.Host) error {
 	_, c.cancel = context.WithCancel(ctx)
 
+	// sync contracts
+	c.contracts.Sync()
+
+	defaultContracts := []domain.CalculationContract{
+		{
+			Formula: "((([container.cpu.time|0] - [container.cpu.time|1]) / 1000000000) / ([system.cpu.time|0] - [system.cpu.time|1])) * 100",
+			States:  map[string]bool{"user": true, "system": true},
+		},
+	}
+
 	// initialize default contracts
-	if err := c.contracts.GenerateDefaultContract(
-		"([container.cpu.time] / [system.cpu.time]) * 1000000",
-		map[string]bool{
-			"user":   true,
-			"system": true},
-	); err != nil {
-		return err
+	for _, contract := range defaultContracts {
+		if err := c.contracts.GenerateDefaultContract(contract.Formula, contract.States); err != nil {
+			return err
+		}
 	}
 
 	// initialize metric builder
@@ -97,11 +104,11 @@ func newCPUMetricProcessor(
 	_ context.Context,
 	set processor.Settings,
 	cfg internal.Config,
-	services *service.Services,
+	services domain.Services,
 ) (internal.MetricProcessor, error) {
 
 	return &CPUMetricProcessor{
-		contracts: internal.NewContractState(),
+		contracts: domain.NewContractState(TypeStr, set.Logger, services.GetContractService()),
 		config:    cfg.(*Config),
 		settings:  set,
 		logger:    set.Logger,
@@ -127,7 +134,7 @@ func (c *CPUMetricProcessor) RegisterService(serviceName string, instanceNumber 
 
 	// notify contract service to create contracts
 	ctx := context.Background()
-	err = c.services.ContractService.CreateMany(ctx, contractsArray)
+	err = c.services.GetContractService().CreateMany(ctx, contractsArray)
 	if err != nil {
 		return err
 	}
@@ -140,7 +147,7 @@ func (c *CPUMetricProcessor) DeleteService(serviceName string, instanceNumber in
 
 	// notify contract service to delete contracts
 	ctx := context.Background()
-	c.services.ContractService.DeleteContract(ctx, formattedServiceName)
+	c.services.GetContractService().DeleteContract(ctx, formattedServiceName)
 
 	return c.contracts.DeleteService(formattedServiceName)
 }

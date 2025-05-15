@@ -9,7 +9,6 @@ import (
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/memoryprocessor/internal/metadata"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/service"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -19,28 +18,16 @@ import (
 )
 
 type MemoryMetricProcessor struct {
-	contracts *internal.ContractState // create a per-service map of calculation contracts
+	contracts *domain.ContractState // create a per-service map of calculation contracts
 	config    *Config
 	logger    *zap.Logger
 	cancel    context.CancelFunc
 	settings  processor.Settings
 	mb        *metadata.MetricsBuilder
-	services  *service.Services
+	services  domain.Services
 }
 
 var _ internal.MetricProcessor = (*MemoryMetricProcessor)(nil)
-
-// Define memory metrics as constants
-const (
-	memoryFormulaExpression = "([container.memory.usage] / [system.memory.usage]) * 1000000"
-)
-
-// Define required memory metric states
-var requiredMemoryMetricStates = map[string]bool{
-	"slab_reclaimable":   true,
-	"slab_unreclaimable": true,
-	"used":               true,
-}
 
 func (c *MemoryMetricProcessor) ProcessMetrics(metrics pmetric.Metrics) error {
 
@@ -65,7 +52,7 @@ func (c *MemoryMetricProcessor) processMetrics(metrics pmetric.Metrics) (pmetric
 	for key, value := range results {
 		rb := c.mb.NewResourceBuilder()
 		rb.SetServiceName(key.Service)
-
+		rb.SetContainerID(key.Service)
 		c.mb.RecordServiceMemoryUtilisationDataPoint(
 			pcommon.NewTimestampFromTime(time.Now()),
 			value,
@@ -89,9 +76,21 @@ func (c *MemoryMetricProcessor) Shutdown(_ context.Context) error {
 func (c *MemoryMetricProcessor) Start(ctx context.Context, _ component.Host) error {
 	_, c.cancel = context.WithCancel(ctx)
 
+	// sync contracts
+	c.contracts.Sync()
+
+	defaultContracts := []domain.CalculationContract{
+		{
+			Formula: "([container.memory.usage] / [system.memory.usage]) * 1000000",
+			States:  map[string]bool{"slab_reclaimable": true, "slab_unreclaimable": true, "used": true},
+		},
+	}
+
 	// initialize default contracts
-	if err := c.contracts.GenerateDefaultContract(memoryFormulaExpression, requiredMemoryMetricStates); err != nil {
-		return err
+	for _, contract := range defaultContracts {
+		if err := c.contracts.GenerateDefaultContract(contract.Formula, contract.States); err != nil {
+			return err
+		}
 	}
 
 	// initialize metric builder
@@ -104,10 +103,10 @@ func newMemoryMetricProcessor(
 	_ context.Context,
 	set processor.Settings,
 	cfg internal.Config,
-	services *service.Services,
+	services domain.Services,
 ) (internal.MetricProcessor, error) {
 	return &MemoryMetricProcessor{
-		contracts: internal.NewContractState(),
+		contracts: domain.NewContractState(TypeStr, set.Logger, services.GetContractService()),
 		config:    cfg.(*Config),
 		settings:  set,
 		logger:    set.Logger,
@@ -132,7 +131,7 @@ func (c *MemoryMetricProcessor) RegisterService(serviceName string, instanceNumb
 
 	// notify contract service to create contracts
 	ctx := context.Background()
-	err = c.services.ContractService.CreateMany(ctx, contractsArray)
+	err = c.services.GetContractService().CreateMany(ctx, contractsArray)
 	if err != nil {
 		return err
 	}
@@ -145,7 +144,7 @@ func (c *MemoryMetricProcessor) DeleteService(serviceName string, instanceNumber
 
 	// notify contract service to delete contracts
 	ctx := context.Background()
-	c.services.ContractService.DeleteContract(ctx, formattedServiceName)
+	c.services.GetContractService().DeleteContract(ctx, formattedServiceName)
 
 	return c.contracts.DeleteService(formattedServiceName)
 }

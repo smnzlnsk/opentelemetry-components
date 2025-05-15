@@ -4,6 +4,8 @@ all_set:
     service.cpu.utilisation:
       enabled: true
   resource_attributes:
+    container_id:
+      enabled: true
     service.name:
       enabled: true
 none_set:
@@ -11,16 +13,26 @@ none_set:
     service.cpu.utilisation:
       enabled: false
   resource_attributes:
+    container_id:
+      enabled: false
     service.name:
       enabled: false
 filter_set_include:
   resource_attributes:
+    container_id:
+      enabled: true
+      metrics_include:
+        - regexp: ".*"
     service.name:
       enabled: true
       metrics_include:
         - regexp: ".*"
 filter_set_exclude:
   resource_attributes:
+    container_id:
+      enabled: true
+      metrics_exclude:
+        - strict: "container_id-val"
     service.name:
       enabled: true
       metrics_exclude:

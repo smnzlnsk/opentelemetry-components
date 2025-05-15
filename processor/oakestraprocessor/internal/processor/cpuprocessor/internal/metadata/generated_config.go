@@ -67,11 +67,15 @@ func (rac *ResourceAttributeConfig) Unmarshal(parser *confmap.Conf) error {
 
 // ResourceAttributesConfig provides config for oakestraprocessor/cpu resource attributes.
 type ResourceAttributesConfig struct {
+	ContainerID ResourceAttributeConfig `mapstructure:"container_id"`
 	ServiceName ResourceAttributeConfig `mapstructure:"service.name"`
 }
 
 func DefaultResourceAttributesConfig() ResourceAttributesConfig {
 	return ResourceAttributesConfig{
+		ContainerID: ResourceAttributeConfig{
+			Enabled: true,
+		},
 		ServiceName: ResourceAttributeConfig{
 			Enabled: true,
 		},

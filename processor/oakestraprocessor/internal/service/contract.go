@@ -5,24 +5,15 @@ import (
 	"errors"
 
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/domain"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/repository"
 	"go.uber.org/zap"
 )
 
-type ContractService interface {
-	Create(ctx context.Context, contract domain.CalculationContract) error
-	CreateMany(ctx context.Context, contracts []domain.CalculationContract) error
-	Update(ctx context.Context, old domain.CalculationContract, new domain.CalculationContract) error
-	DeleteFormula(ctx context.Context, contract domain.CalculationContract) error
-	DeleteContract(ctx context.Context, service string) error
-}
-
 type contractService struct {
-	contractRepository repository.ContractRepository
+	contractRepository domain.ContractRepository
 	logger             *zap.Logger
 }
 
-func NewContractService(contractRepository repository.ContractRepository, logger *zap.Logger) ContractService {
+func NewContractService(contractRepository domain.ContractRepository, logger *zap.Logger) domain.ContractService {
 	return &contractService{
 		contractRepository: contractRepository,
 		logger:             logger,
@@ -81,4 +72,8 @@ func (s *contractService) DeleteContract(ctx context.Context, service string) er
 	}
 
 	return s.contractRepository.DeleteContract(ctx, service)
+}
+
+func (s *contractService) GetContractsForProcessor(ctx context.Context, processor string) ([]domain.ContractDocument, error) {
+	return s.contractRepository.GetContractsForProcessor(ctx, processor)
 }

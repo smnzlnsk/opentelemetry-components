@@ -28,6 +28,7 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					ServiceMemoryUtilisation: MetricConfig{Enabled: true},
 				},
 				ResourceAttributes: ResourceAttributesConfig{
+					ContainerID: ResourceAttributeConfig{Enabled: true},
 					ServiceName: ResourceAttributeConfig{Enabled: true},
 				},
 			},
@@ -39,6 +40,7 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					ServiceMemoryUtilisation: MetricConfig{Enabled: false},
 				},
 				ResourceAttributes: ResourceAttributesConfig{
+					ContainerID: ResourceAttributeConfig{Enabled: false},
 					ServiceName: ResourceAttributeConfig{Enabled: false},
 				},
 			},
@@ -75,12 +77,14 @@ func TestResourceAttributesConfig(t *testing.T) {
 		{
 			name: "all_set",
 			want: ResourceAttributesConfig{
+				ContainerID: ResourceAttributeConfig{Enabled: true},
 				ServiceName: ResourceAttributeConfig{Enabled: true},
 			},
 		},
 		{
 			name: "none_set",
 			want: ResourceAttributesConfig{
+				ContainerID: ResourceAttributeConfig{Enabled: false},
 				ServiceName: ResourceAttributeConfig{Enabled: false},
 			},
 		},
