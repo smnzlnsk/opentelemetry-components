@@ -2,8 +2,9 @@ package unixsocketreceiver // import github.com/smnzlnsk/opentelemetry-component
 
 import (
 	"context"
-	"github.com/smnzlnsk/opentelemetry-components/receiver/unixsocketreceiver/internal/metadata"
 	"time"
+
+	"github.com/smnzlnsk/opentelemetry-components/receiver/unixsocketreceiver/internal/metadata"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
@@ -12,7 +13,7 @@ import (
 
 const (
 	defaultFolder   = "/var/run/unixsocketreceiver"
-	defaultInterval = time.Second * 5
+	defaultInterval = time.Second * 1
 )
 
 // NewFactory creates a factory for unixsocketreceiver

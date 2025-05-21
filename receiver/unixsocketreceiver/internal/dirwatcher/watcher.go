@@ -1,21 +1,26 @@
 package dirwatcher
 
 import (
-	"go.uber.org/zap"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // DirectoryWatcher watches a directory for newly added Unix sockets
+// and also monitors for new subdirectories to watch for sockets
 type DirectoryWatcher struct {
 	dir          string
 	logger       *zap.Logger
 	knownFiles   map[string]os.FileInfo
+	knownDirs    map[string]*DirectoryWatcher
 	socketHandle func(string)
 	interval     time.Duration
 	mutex        sync.Mutex
+	stopChan     chan struct{}
+	stopped      bool
 }
 
 func NewDirectoryWatcher(dir string, logger *zap.Logger, interval time.Duration, handle func(string)) *DirectoryWatcher {
@@ -23,29 +28,61 @@ func NewDirectoryWatcher(dir string, logger *zap.Logger, interval time.Duration,
 		dir:          dir,
 		logger:       logger,
 		knownFiles:   make(map[string]os.FileInfo),
+		knownDirs:    make(map[string]*DirectoryWatcher),
 		socketHandle: handle,
 		interval:     interval,
+		stopChan:     make(chan struct{}),
 	}
 }
 
 // Start starts the directory watcher, polling for changes every interval seconds
 func (dw *DirectoryWatcher) Start() {
-	dw.logger.Info("Starting directory watcher...")
+	dw.logger.Info("Starting directory watcher...", zap.String("directory", dw.dir))
 	go func() {
 		for {
-			// Poll the directory for new files.
-			dw.pollDirectory()
-			time.Sleep(dw.interval)
+			select {
+			case <-dw.stopChan:
+				dw.logger.Info("Stopping directory watcher", zap.String("directory", dw.dir))
+				return
+			default:
+				// Poll the directory for new files and subdirectories.
+				dw.pollDirectory()
+				time.Sleep(dw.interval)
+			}
 		}
 	}()
+}
+
+// Stop stops the directory watcher and all child watchers
+func (dw *DirectoryWatcher) Stop() {
+	dw.mutex.Lock()
+	defer dw.mutex.Unlock()
+
+	if dw.stopped {
+		return
+	}
+
+	// Stop all subdirectory watchers
+	for _, subWatcher := range dw.knownDirs {
+		subWatcher.Stop()
+	}
+
+	// Signal the polling goroutine to stop
+	close(dw.stopChan)
+	dw.stopped = true
 }
 
 func (dw *DirectoryWatcher) pollDirectory() {
 	dw.mutex.Lock()
 	defer dw.mutex.Unlock()
 
+	// If stopped, don't continue
+	if dw.stopped {
+		return
+	}
+
 	// Read the directory contents.
-	files, err := os.ReadDir(dw.dir)
+	entries, err := os.ReadDir(dw.dir)
 	if err != nil {
 		dw.logger.Error("error reading directory",
 			zap.String("directory", dw.dir),
@@ -53,8 +90,20 @@ func (dw *DirectoryWatcher) pollDirectory() {
 		return
 	}
 
-	for _, entry := range files {
+	for _, entry := range entries {
 		path := filepath.Join(dw.dir, entry.Name())
+
+		if entry.IsDir() {
+			// Found a directory, check if we're already watching it
+			if _, known := dw.knownDirs[path]; !known {
+				dw.logger.Info("new directory detected", zap.String("path", path))
+				// Create a new watcher for this directory
+				subDirWatcher := NewDirectoryWatcher(path, dw.logger, dw.interval, dw.socketHandle)
+				dw.knownDirs[path] = subDirWatcher
+				subDirWatcher.Start()
+			}
+			continue
+		}
 
 		// check if the file is a new file and is a socket
 		if _, known := dw.knownFiles[path]; !known && dw.isUnixSocket(path) {
@@ -67,6 +116,16 @@ func (dw *DirectoryWatcher) pollDirectory() {
 				// connect to the socket in a goroutine
 				go dw.socketHandle(path)
 			}
+		}
+	}
+
+	// cleanup: remove deleted directories from the known list
+	for path, subWatcher := range dw.knownDirs {
+		if _, err = os.Stat(path); os.IsNotExist(err) {
+			subWatcher.Stop()
+			delete(dw.knownDirs, path)
+			dw.logger.Info("directory removed",
+				zap.String("path", path))
 		}
 	}
 
