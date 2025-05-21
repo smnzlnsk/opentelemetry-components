@@ -50,7 +50,7 @@ func (p *PrometheusParser) ParsePrometheusMetrics(socketPath string, data []byte
 	// Create a resource metrics builder
 	rm := metrics.ResourceMetrics().AppendEmpty()
 	rm.Resource().Attributes().PutStr("service.name", "prometheus")
-	rm.Resource().Attributes().PutStr("container_id", strings.Split(socketPath, "/")[len(strings.Split(socketPath, "/"))-1])
+	rm.Resource().Attributes().PutStr("container_id", strings.Split(socketPath, "/")[len(strings.Split(socketPath, "/"))-2])
 
 	// Add a scope metrics
 	sm := rm.ScopeMetrics().AppendEmpty()
