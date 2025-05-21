@@ -107,7 +107,10 @@ func (p *policy) CheckNotificationConditions(evaluationResult domain.EvaluationR
 	return nil
 }
 func (p *policy) Enforce(processorIdentifier string, arguments ...interface{}) error {
-	evaluationResult := p.heuristicEntity.Evaluate(processorIdentifier, arguments...)
+	evaluationResult, err := p.heuristicEntity.Evaluate(processorIdentifier, arguments...)
+	if err != nil {
+		return err
+	}
 	return p.CheckNotificationConditions(evaluationResult)
 }
 

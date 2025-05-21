@@ -13,7 +13,7 @@ type HeuristicEntityFactory interface {
 type HeuristicEntity interface {
 	Processors() map[string]Processor
 	AddProcessor(processor Processor)
-	Evaluate(processorIdentifier string, arguments ...interface{}) EvaluationResult
+	Evaluate(processorIdentifier string, arguments ...interface{}) (EvaluationResult, error)
 	Start() error
 	Shutdown() error
 }

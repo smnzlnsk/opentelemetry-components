@@ -60,7 +60,10 @@ func TestBuilder(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tree := tt.build()
-			result := tree.Evaluate(1.0, tt.params)
+			result, err := tree.Evaluate(1.0, tt.params)
+			if err != nil {
+				t.Errorf("%s: expected no error, got %v", tt.name, err)
+			}
 			if result != tt.expected {
 				t.Errorf("%s: expected %f, got %f", tt.name, tt.expected, result)
 			}

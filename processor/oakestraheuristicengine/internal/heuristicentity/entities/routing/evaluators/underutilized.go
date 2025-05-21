@@ -14,9 +14,9 @@ func NewUnderutilizedEvaluator(identifier string) domain.Evaluator {
 	}
 }
 
-func (e *underutilizedEvaluator) Evaluate(factor float64, params map[string]interface{}) float64 {
+func (e *underutilizedEvaluator) Evaluate(factor float64, params map[string]interface{}) (float64, error) {
 	// TODO: Implement the underutilized evaluator
 	// This evaluator should evaluate the underutilization factor of the service instances
 
-	return 1 * factor
+	return 1 * factor, nil
 }

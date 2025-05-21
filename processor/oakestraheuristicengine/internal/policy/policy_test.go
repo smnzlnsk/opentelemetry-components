@@ -14,20 +14,20 @@ type pmockHeuristicEntity struct {
 	evaluateFunc func(processorIdentifier string, jobname string, values map[string]interface{}) domain.Evaluation
 }
 
-func (m *pmockHeuristicEntity) Evaluate(processorIdentifier string, options ...interface{}) domain.EvaluationResult {
+func (m *pmockHeuristicEntity) Evaluate(processorIdentifier string, options ...interface{}) (domain.EvaluationResult, error) {
 	if m.evaluateFunc != nil {
 		evaluation := m.evaluateFunc(processorIdentifier, "test_job", map[string]interface{}{})
 		return domain.EvaluationResult{
 			JobName: evaluation.JobName,
 			Results: evaluation.Entries,
-		}
+		}, nil
 	}
 	return domain.EvaluationResult{
 		JobName: "test_job",
 		Results: []domain.EvaluationEntry{
 			{InstanceNumber: 1, Priority: 1.0},
 		},
-	}
+	}, nil
 }
 
 // MockNotificationInterface implements interfaces.NotificationInterface

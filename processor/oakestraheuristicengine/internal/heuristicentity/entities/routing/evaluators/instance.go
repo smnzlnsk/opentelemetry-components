@@ -21,6 +21,6 @@ func (e *instanceEvaluator) Identifier() string {
 	return e.identifier
 }
 
-func (e *instanceEvaluator) Evaluate(factor float64, params map[string]interface{}) float64 {
-	return 1
+func (e *instanceEvaluator) Evaluate(factor float64, params map[string]interface{}) (float64, error) {
+	return 1, nil
 }

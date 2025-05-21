@@ -18,11 +18,11 @@ func (e *closestEvaluator) Identifier() string {
 	return e.identifier
 }
 
-func (e *closestEvaluator) Evaluate(factor float64, params map[string]interface{}) float64 {
+func (e *closestEvaluator) Evaluate(factor float64, params map[string]interface{}) (float64, error) {
 	// TODO: Implement the closest evaluator
 	// This evaluator should evaluate the closest service instance to the current service instance node that is asking
 	// Therefore, we will have to include the current node location in the metrics data
 	// We should best start by implementing a geo-location receiver in the monitoring-agent
 	// enabling us to calculate the rough distance estimate between the nodes of interest
-	return 1
+	return 1, nil
 }

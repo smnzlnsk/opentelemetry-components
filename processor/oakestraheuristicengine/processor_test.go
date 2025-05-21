@@ -35,11 +35,11 @@ func (m *mockProcessor) Evaluator() domain.Evaluator {
 	return nil // Not needed for tests
 }
 
-func (m *mockProcessor) Process(instanceNumber int, prev float64, params map[string]interface{}) domain.EvaluationEntry {
+func (m *mockProcessor) Process(instanceNumber int, prev float64, params map[string]interface{}) (domain.EvaluationEntry, error) {
 	return domain.EvaluationEntry{
 		InstanceNumber: instanceNumber,
 		Priority:       prev,
-	}
+	}, nil
 }
 
 // mockHeuristicEntity implements interfaces.HeuristicEntity
@@ -64,14 +64,14 @@ func (m *mockHeuristicEntity) Shutdown() error {
 	return nil
 }
 
-func (m *mockHeuristicEntity) Evaluate(processorIdentifier string, values ...interface{}) domain.EvaluationResult {
+func (m *mockHeuristicEntity) Evaluate(processorIdentifier string, values ...interface{}) (domain.EvaluationResult, error) {
 	// Just return a fixed value for testing
 	return domain.EvaluationResult{
 		JobName: "test-job",
 		Results: []domain.EvaluationEntry{
 			{InstanceNumber: 1, Priority: 0.75},
 		},
-	}
+	}, nil
 }
 
 func (m *mockHeuristicEntity) Processors() map[string]domain.Processor {

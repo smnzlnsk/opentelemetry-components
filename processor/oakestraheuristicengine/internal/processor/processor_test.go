@@ -53,7 +53,8 @@ func TestHeuristicProcessorWorkflow(t *testing.T) {
 	// Run test cases
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			score := processor.Process(1, 1, tc.params)
+			score, err := processor.Process(1, 1, tc.params)
+			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedScore, score.Priority)
 		})
 	}

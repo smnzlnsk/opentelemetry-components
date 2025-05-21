@@ -25,9 +25,14 @@ func (p *processor) Evaluator() domain.Evaluator {
 	return p.evaluator
 }
 
-func (p *processor) Process(instanceNumber int, prev float64, params map[string]interface{}) domain.EvaluationEntry {
+func (p *processor) Process(instanceNumber int, prev float64, params map[string]interface{}) (domain.EvaluationEntry, error) {
+	priority, err := p.evaluator.Evaluate(prev, params)
+	if err != nil {
+		return domain.EvaluationEntry{}, err
+	}
+
 	return domain.EvaluationEntry{
 		InstanceNumber: instanceNumber,
-		Priority:       p.evaluator.Evaluate(prev, params),
-	}
+		Priority:       priority,
+	}, nil
 }

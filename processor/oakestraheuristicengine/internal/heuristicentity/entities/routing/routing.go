@@ -2,6 +2,7 @@ package routing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 
@@ -55,16 +56,16 @@ func NewRoutingEntity(services domain.Services, logger *zap.Logger) domain.Heuri
 // arguments:
 // - processorIdentifier: the identifier of the processor to evaluate
 // - first positional argument: jobRequest [domain.JobRequest]
-func (r *routingEntity) Evaluate(processorIdentifier string, arguments ...interface{}) domain.EvaluationResult {
+func (r *routingEntity) Evaluate(processorIdentifier string, arguments ...interface{}) (domain.EvaluationResult, error) {
 	if len(arguments) == 0 {
 		r.logger.Error("No arguments provided to Evaluate")
-		return domain.EvaluationResult{JobName: "unknown", Values: make(map[string]map[string]interface{})}
+		return domain.EvaluationResult{JobName: "unknown", Values: make(map[string]map[string]interface{})}, errors.New("no arguments provided to Evaluate")
 	}
 
 	jobRequest, ok := arguments[0].(domain.JobRequest)
 	if !ok {
 		r.logger.Error("First argument is not a JobRequest", zap.Any("actual_type", fmt.Sprintf("%T", arguments[0])))
-		return domain.EvaluationResult{JobName: "unknown", Values: make(map[string]map[string]interface{})}
+		return domain.EvaluationResult{JobName: "unknown", Values: make(map[string]map[string]interface{})}, errors.New("first argument is not a JobRequest")
 	}
 	jobName := jobRequest.JobData.JobName
 	instances := jobRequest.JobData.ServiceInstanceList
@@ -81,7 +82,7 @@ func (r *routingEntity) Evaluate(processorIdentifier string, arguments ...interf
 	)
 	if err != nil {
 		r.logger.Error("Failed to get job metrics", zap.Error(err))
-		return result
+		return result, err
 	}
 
 	for i := range instances {
@@ -90,7 +91,11 @@ func (r *routingEntity) Evaluate(processorIdentifier string, arguments ...interf
 
 		result.Values[instanceName] = instanceValues
 
-		evalResult := r.processorStore.Get(processorIdentifier).Process(instances[i].InstanceNumber, 1, instanceValues)
+		evalResult, err := r.processorStore.Get(processorIdentifier).Process(instances[i].InstanceNumber, 1, instanceValues)
+		if err != nil {
+			r.logger.Error("Failed to process instance", zap.Error(err))
+			return result, err
+		}
 		evalResult.IpType = processorIdentifier
 
 		result.Results = append(
@@ -105,7 +110,7 @@ func (r *routingEntity) Evaluate(processorIdentifier string, arguments ...interf
 		}*/
 	}
 
-	return result
+	return result, nil
 }
 
 func (r *routingEntity) Start() error {

@@ -21,7 +21,7 @@ func (d *dynamicRandomEvaluator) Identifier() string {
 	return d.identifier
 }
 
-func (d *dynamicRandomEvaluator) Evaluate(factor float64, params map[string]interface{}) float64 {
+func (d *dynamicRandomEvaluator) Evaluate(factor float64, params map[string]interface{}) (float64, error) {
 	// Generate a new random value on each evaluation
-	return rand.Float64() * factor
+	return rand.Float64() * factor, nil
 }

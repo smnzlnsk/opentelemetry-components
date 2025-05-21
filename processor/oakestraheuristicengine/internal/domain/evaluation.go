@@ -1,7 +1,7 @@
 package domain
 
 type Evaluator interface {
-	Evaluate(initalValue float64, params map[string]interface{}) float64
+	Evaluate(initalValue float64, params map[string]interface{}) (float64, error)
 }
 
 type Evaluation struct {

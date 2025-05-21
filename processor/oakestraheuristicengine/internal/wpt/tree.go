@@ -43,8 +43,8 @@ func (d *decisionTree) Identifier() string {
 	return d.identifier
 }
 
-func (d *decisionTree) Evaluate(factor float64, params map[string]interface{}) float64 {
-	return d.root.Evaluate(factor, params)
+func (d *decisionTree) Evaluate(factor float64, params map[string]interface{}) (float64, error) {
+	return d.root.Evaluate(factor, params), nil
 }
 
 func (n *node) Evaluate(factor float64, params map[string]interface{}) float64 {
