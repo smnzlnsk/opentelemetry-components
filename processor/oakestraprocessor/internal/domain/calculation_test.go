@@ -44,11 +44,11 @@ func TestContractState(t *testing.T) {
 
 			// Verify contract registration
 			key := ContractKey{Service: service, Formula: "[metric1] + [metric2]"}
-			contract, exists := cs.Contracts[key]
+			contract, err := cs.Contracts.GetContract(key)
+			require.NoError(t, err)
 
 			assert.Equal(t, "test", contract.Processor, "Contract Processor should be set to the ContractState's processorName")
 
-			require.True(t, exists, "Contract was not registered")
 			require.Equal(t, service, contract.Service, "Service mismatch")
 
 			// Verify metric filters
@@ -94,8 +94,8 @@ func TestContractState(t *testing.T) {
 
 		// Verify default contract registration
 		defaultKey := ContractKey{Service: "default", Formula: defaultFormula}
-		_, exists := cs.Contracts[defaultKey]
-		require.True(t, exists, "Default contract not registered")
+		_, err = cs.Contracts.GetContract(defaultKey)
+		require.NoError(t, err, "Default contract not registered")
 
 		// Register service with its own contract
 		contracts := map[string]CalculationContract{
@@ -112,7 +112,7 @@ func TestContractState(t *testing.T) {
 
 		// Count contracts for the service
 		serviceContractCount := 0
-		for key := range cs.Contracts {
+		for key := range cs.Contracts.GetAllContracts() {
 			if key.Service == service {
 				serviceContractCount++
 			}
@@ -122,10 +122,10 @@ func TestContractState(t *testing.T) {
 		// Verify specific contracts exist
 		key1 := ContractKey{Service: service, Formula: "[metric1] + [metric2]"}
 		key2 := ContractKey{Service: service, Formula: "[metric3] + [metric4]"}
-		_, exists = cs.Contracts[key1]
-		require.True(t, exists, "Service-specific contract not found")
-		_, exists = cs.Contracts[key2]
-		require.True(t, exists, "Default contract not found for service")
+		_, err = cs.Contracts.GetContract(key1)
+		require.NoError(t, err, "Service-specific contract not found")
+		_, err = cs.Contracts.GetContract(key2)
+		require.NoError(t, err, "Default contract not found for service")
 
 		// Verify all metric filters
 		expectedMetrics := []string{"metric1", "metric2", "metric3", "metric4"}
@@ -171,8 +171,8 @@ func TestContractState(t *testing.T) {
 
 			// Verify all cleanup
 			key := ContractKey{Service: service, Formula: formula}
-			_, exists := cs.Contracts[key]
-			require.False(t, exists, "Contract should be deleted")
+			_, err = cs.Contracts.GetContract(key)
+			require.Error(t, err, "Contract should be deleted")
 
 			for metric := range contracts[formula].Metrics {
 				_, exists := cs.Filters.MetricFiltersMap()[metric]
@@ -264,7 +264,7 @@ func TestRegisterServiceWithDefaults(t *testing.T) {
 
 	// Count contracts for the service
 	serviceContractCount := 0
-	for key := range cs.Contracts {
+	for key := range cs.Contracts.GetAllContracts() {
 		if key.Service == service {
 			serviceContractCount++
 		}
@@ -274,10 +274,10 @@ func TestRegisterServiceWithDefaults(t *testing.T) {
 	// Verify both formulas exist
 	key1 := ContractKey{Service: service, Formula: "[metric1] + [metric2]"}
 	key2 := ContractKey{Service: service, Formula: "[metric3] + [metric4]"}
-	_, exists := cs.Contracts[key1]
-	require.True(t, exists, "Service-specific contract not found")
-	_, exists = cs.Contracts[key2]
-	require.True(t, exists, "Default contract not found")
+	_, err = cs.Contracts.GetContract(key1)
+	require.NoError(t, err, "Service-specific contract not found")
+	_, err = cs.Contracts.GetContract(key2)
+	require.NoError(t, err, "Default contract not found")
 }
 
 func TestDeleteService(t *testing.T) {
@@ -334,8 +334,8 @@ func TestDeleteService(t *testing.T) {
 
 			// Verify initial setup
 			key := ContractKey{Service: tt.initialService, Formula: tt.initialFormula}
-			_, exists := cs.Contracts[key]
-			require.True(t, exists, "Contract should exist before deletion")
+			_, err = cs.Contracts.GetContract(key)
+			require.NoError(t, err, "Contract should exist before deletion")
 
 			// Verify metrics were properly registered
 			for metric := range tt.expectedMetrics {
@@ -356,8 +356,8 @@ func TestDeleteService(t *testing.T) {
 			require.NoError(t, err)
 
 			// Verify service deletion
-			_, exists = cs.Contracts[key]
-			require.False(t, exists, "Contract should be deleted")
+			_, err = cs.Contracts.GetContract(key)
+			require.Error(t, err, "Contract should be deleted")
 
 			// Verify metric filter cleanup
 			for metric, shouldExist := range tt.expectedMetrics {
@@ -391,8 +391,8 @@ func TestDefaultContractHandling(t *testing.T) {
 	require.NoError(t, err)
 
 	defaultKey := ContractKey{Service: "default", Formula: defaultFormula}
-	defaultContract, exists := cs.Contracts[defaultKey]
-	require.True(t, exists, "Default contract not registered")
+	defaultContract, err := cs.Contracts.GetContract(defaultKey)
+	require.NoError(t, err, "Default contract not registered")
 	require.Equal(t, "default", defaultContract.Service)
 	require.Equal(t, defaultFormula, defaultContract.Formula)
 	require.Contains(t, defaultContract.States, "running")
@@ -414,8 +414,8 @@ func TestDefaultContractHandling(t *testing.T) {
 
 	// Verify service has both its own contract and the default contract
 	serviceDefaultKey := ContractKey{Service: service, Formula: defaultFormula}
-	serviceContract, exists := cs.Contracts[serviceDefaultKey]
-	require.True(t, exists, "Default contract not copied to service")
+	serviceContract, err := cs.Contracts.GetContract(serviceDefaultKey)
+	require.NoError(t, err, "Default contract not copied to service")
 	require.Equal(t, service, serviceContract.Service)
 	require.Equal(t, defaultFormula, serviceContract.Formula)
 
@@ -436,10 +436,10 @@ func TestDefaultContractHandling(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check that default contract still exists but service contracts are gone
-	_, exists = cs.Contracts[defaultKey]
-	require.True(t, exists, "Default contract should still exist")
-	_, exists = cs.Contracts[serviceDefaultKey]
-	require.False(t, exists, "Service's copy of default contract should be deleted")
+	_, err = cs.Contracts.GetContract(defaultKey)
+	require.NoError(t, err, "Default contract should still exist")
+	_, err = cs.Contracts.GetContract(serviceDefaultKey)
+	require.Error(t, err, "Service's copy of default contract should be deleted")
 }
 
 func TestServiceRegistration(t *testing.T) {
@@ -460,8 +460,8 @@ func TestServiceRegistration(t *testing.T) {
 
 		// Verify contract registration
 		key := ContractKey{Service: service, Formula: "[metric1] + [metric2]"}
-		contract, exists := cs.Contracts[key]
-		require.True(t, exists)
+		contract, err := cs.Contracts.GetContract(key)
+		require.NoError(t, err)
 		require.Equal(t, service, contract.Service)
 		require.Equal(t, 2, len(contract.States))
 
@@ -522,8 +522,8 @@ func TestContractState_Comprehensive(t *testing.T) {
 			require.NoError(t, err)
 
 			key := ContractKey{Service: "default", Formula: formula}
-			contract, exists := cs.Contracts[key]
-			require.True(t, exists)
+			contract, err := cs.Contracts.GetContract(key)
+			require.NoError(t, err)
 			require.Equal(t, "default", contract.Service)
 			require.Contains(t, contract.Metrics, "metric1")
 			require.Contains(t, contract.Metrics, "metric2")
@@ -535,7 +535,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 			require.NoError(t, err, "Should allow multiple default contracts")
 
 			count := 0
-			for key := range cs.Contracts {
+			for key := range cs.Contracts.GetAllContracts() {
 				if key.Service == "default" {
 					count++
 				}
@@ -703,7 +703,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 
 		// Verify all services were registered
 		serviceCount := 0
-		for key := range cs.Contracts {
+		for key := range cs.Contracts.GetAllContracts() {
 			if key.Service != "default" {
 				serviceCount++
 			}

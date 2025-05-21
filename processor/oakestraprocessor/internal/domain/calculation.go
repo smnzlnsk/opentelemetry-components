@@ -114,7 +114,7 @@ type ContractState struct {
 	once                sync.Once
 	processorName       string
 	logger              *zap.Logger
-	Contracts           map[ContractKey]CalculationContract
+	Contracts           ContractManager
 	Filters             MetricFilter
 	Datapoints          map[DatapointKey]map[int]MetricDatapoint
 	compiledExpressions map[ContractKey]*govaluate.EvaluableExpression
@@ -126,7 +126,7 @@ func NewContractState(name string, logger *zap.Logger, service ContractService) 
 	return &ContractState{
 		processorName:       name,
 		logger:              logger,
-		Contracts:           make(map[ContractKey]CalculationContract),
+		Contracts:           NewContractManager(),
 		Filters:             NewFilter(),
 		Datapoints:          make(map[DatapointKey]map[int]MetricDatapoint),
 		compiledExpressions: make(map[ContractKey]*govaluate.EvaluableExpression),
@@ -151,7 +151,7 @@ func (c *ContractState) Sync() {
 				k := ContractKey{Service: contract.Service, Formula: contract.Formula}
 
 				// add contract to the state
-				c.Contracts[k] = contract
+				c.Contracts.AddContract(contract)
 
 				// add filters for the contract
 				for metric := range contract.Metrics {
@@ -170,20 +170,13 @@ func (c *ContractState) Sync() {
 			}
 		}
 	})
-	c.logger.Info("Contracts synced", zap.Int("count", len(c.Contracts)))
+	c.logger.Info("Contracts synced", zap.Int("count", c.Contracts.Length()))
 }
 
 func (c *ContractState) GetDefaultContracts() map[string]CalculationContract {
 	c.RLock()
 	defer c.RUnlock()
-
-	res := make(map[string]CalculationContract)
-	for key, contract := range c.Contracts {
-		if key.Service == "default" {
-			res[key.Formula] = contract
-		}
-	}
-	return res
+	return c.Contracts.GetDefaultContracts()
 }
 
 func (c *ContractState) GenerateDefaultContract(formula string, states map[string]bool) error {
@@ -205,7 +198,7 @@ func (c *ContractState) GenerateDefaultContract(formula string, states map[strin
 		Metrics:   filterMetricsFromFormula(formula),
 	}
 
-	c.Contracts[key] = contract
+	c.Contracts.AddContract(contract)
 	c.compiledExpressions[key] = expr
 
 	return nil
@@ -230,33 +223,27 @@ func (c *ContractState) RegisterService(service string, contracts map[string]Cal
 	}
 
 	// Check if service already exists
-	for key := range c.Contracts {
-		if key.Service == service {
-			return fmt.Errorf("service %s already registered", service)
-		}
+	if c.Contracts.IsServiceRegistered(service) {
+		return fmt.Errorf("service %s already registered", service)
 	}
 
 	// First register default contracts for this service
-	for key, contract := range c.Contracts {
-		if key.Service != "default" {
-			continue
-		}
-
+	for formula, contract := range c.Contracts.GetDefaultContracts() {
 		serviceKey := ContractKey{
 			Service: service,
-			Formula: key.Formula,
+			Formula: formula,
 		}
 
 		serviceContract := contract
 		serviceContract.Service = service
 		serviceContract.Processor = c.processorName
-		normalisedFormula := fmt.Sprintf("(%s) / %f", key.Formula, normValue)
+		normalisedFormula := fmt.Sprintf("(%s) / %f", formula, normValue)
 		expr, err := govaluate.NewEvaluableExpression(normalisedFormula)
 		if err != nil {
-			return fmt.Errorf("invalid formula %s: %w", key.Formula, err)
+			return fmt.Errorf("invalid formula %s: %w", formula, err)
 		}
 
-		c.Contracts[serviceKey] = serviceContract
+		c.Contracts.AddContract(serviceContract)
 		c.compiledExpressions[serviceKey] = expr
 
 		// Update filters for default contract metrics
@@ -281,7 +268,7 @@ func (c *ContractState) RegisterService(service string, contracts map[string]Cal
 			return fmt.Errorf("invalid formula %s: %w", formula, err)
 		}
 
-		c.Contracts[key] = contract
+		c.Contracts.AddContract(contract)
 		c.compiledExpressions[key] = expr
 
 		// Update filters
@@ -303,13 +290,13 @@ func (c *ContractState) DeleteService(service string) error {
 	}
 
 	// Clean up metric filters and contracts
-	for key, contract := range c.Contracts {
+	for key, contract := range c.Contracts.GetAllContracts() {
 		if key.Service == service {
 			// Remove filters for this contract's metrics
 			for metric := range contract.Metrics {
 				c.Filters.DeleteMetricFilter(metric, contract.States)
 			}
-			delete(c.Contracts, key)
+			c.Contracts.DeleteContract(contract)
 			delete(c.compiledExpressions, key)
 		}
 	}
@@ -332,13 +319,13 @@ func (c *ContractState) RemoveContract(service string) error {
 	defer c.Unlock()
 
 	// Find and remove all contracts for the service
-	for key, contract := range c.Contracts {
+	for key, contract := range c.Contracts.GetAllContracts() {
 		if key.Service == service {
 			// Remove filters for this contract's metrics
 			for metric := range contract.Metrics {
 				c.Filters.DeleteMetricFilter(metric, contract.States)
 			}
-			delete(c.Contracts, key)
+			c.Contracts.DeleteContract(contract)
 			delete(c.compiledExpressions, key)
 		}
 	}
@@ -372,17 +359,7 @@ func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
 
 		// Check if service is registered (only for non-system metrics)
 		if serviceName != "" {
-			serviceExists := false
-			for key := range c.Contracts {
-				if key.Service == "default" {
-					continue
-				}
-				if key.Service == serviceName {
-					serviceExists = true
-					break
-				}
-			}
-			if !serviceExists {
+			if !c.Contracts.IsServiceRegistered(serviceName) {
 				continue
 			}
 		}
@@ -456,7 +433,7 @@ func (c *ContractState) Evaluate() CalculationResults {
 
 	// Skip default contracts in evaluation
 	serviceContracts := make(map[string][]ContractKey)
-	for key := range c.Contracts {
+	for key := range c.Contracts.GetAllContracts() {
 		if key.Service != "default" {
 			serviceContracts[key.Service] = append(serviceContracts[key.Service], key)
 		}
@@ -474,7 +451,11 @@ func (c *ContractState) Evaluate() CalculationResults {
 		go func() {
 			defer wg.Done()
 			for work := range workChan {
-				contract := c.Contracts[work.contractKey]
+				contract, err := c.Contracts.GetContract(work.contractKey)
+				if err != nil {
+					c.logger.Error("Failed to get contract", zap.Error(err))
+					continue
+				}
 				expr := c.compiledExpressions[work.contractKey]
 				if expr == nil {
 					continue
