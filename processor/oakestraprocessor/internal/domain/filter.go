@@ -44,12 +44,15 @@ func (f *filter) AddMetricFilter(key string, state string) error {
 	}
 
 	if mf, exists := f.MetricFilters[key]; exists {
-		// Increment activeContracts for overlapping metrics
+		// Each call to AddMetricFilter represents a new contract using this metric
+		mf.mu.Lock()
 		mf.activeContracts++
-		// set states where necessary
+		mf.mu.Unlock()
+		// Add state tracking
 		mf.addState(state)
 		return nil
 	}
+
 	mfs := newMetricFilterStruct()
 	mfs.addState(state)
 	f.MetricFilters[key] = mfs
@@ -71,17 +74,18 @@ func (f *filter) DeleteMetricFilter(key string, state string) error {
 	}
 
 	if mfs, exists := f.MetricFilters[key]; exists {
-		// First remove states
+		// Each call to DeleteMetricFilter represents removing a contract using this metric
+		mfs.mu.Lock()
+		mfs.activeContracts--
+		contractsLeft := mfs.activeContracts
+		mfs.mu.Unlock()
+
+		// Remove state tracking
 		mfs.removeState(state)
 
-		// Only decrement activeContracts if all states are removed
-		if len(mfs.StateFilter) == 0 {
-			mfs.activeContracts--
-
-			// If no more active contracts, delete the entire metric filter
-			if mfs.activeContracts <= 0 {
-				delete(f.MetricFilters, key)
-			}
+		// Delete the metric filter if no more contracts use it
+		if contractsLeft <= 0 {
+			delete(f.MetricFilters, key)
 		}
 	}
 	return nil
@@ -108,15 +112,18 @@ func (mfs *metricFilterStruct) addState(state string) {
 func (mfs *metricFilterStruct) removeState(state string) {
 	mfs.mu.Lock()
 	defer mfs.mu.Unlock()
-	mfs.StateFilter[state]--
-	if mfs.StateFilter[state] <= 0 {
-		delete(mfs.StateFilter, state)
+
+	if count, exists := mfs.StateFilter[state]; exists && count > 0 {
+		mfs.StateFilter[state]--
+		if mfs.StateFilter[state] <= 0 {
+			delete(mfs.StateFilter, state)
+		}
 	}
 }
 
 func newMetricFilterStruct() *metricFilterStruct {
 	mfs := metricFilterStruct{
-		activeContracts: 1,
+		activeContracts: 1, // Start at 1 since this is the first contract using this metric
 		StateFilter:     make(map[string]int),
 	}
 	return &mfs

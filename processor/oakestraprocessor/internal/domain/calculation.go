@@ -27,7 +27,7 @@ type CalculationResultKey struct {
 	State   string
 }
 
-// CalculationParameters map[state][metric]metricValue
+// CalculationParameters map[metric(age){state}]metricValue
 type CalculationParameters map[string]interface{}
 
 // CalculationResults maps result keys to calculated values
@@ -54,6 +54,7 @@ type Datapoint struct {
 }
 
 // GetServicesMap converts calculation results to a nested map structure
+// returns: map[service][formula][state]value
 func (cr CalculationResults) GetServicesMap() map[string]map[string]map[string]float64 {
 	result := make(map[string]map[string]map[string]float64)
 
@@ -70,43 +71,6 @@ func (cr CalculationResults) GetServicesMap() map[string]map[string]map[string]f
 	}
 
 	return result
-}
-
-// GetServiceNames returns a slice of unique service names
-func (cr CalculationResults) GetServiceNames() []string {
-	services := make(map[string]struct{})
-	for key := range cr {
-		services[key.Service] = struct{}{}
-	}
-
-	result := make([]string, 0, len(services))
-	for service := range services {
-		result = append(result, service)
-	}
-	return result
-}
-
-// GetResultsForService returns all results for a given service
-func (cr CalculationResults) GetResultsForService(service string) map[string]map[string]float64 {
-	result := make(map[string]map[string]float64)
-
-	for key, value := range cr {
-		if key.Service == service {
-			if _, ok := result[key.Formula]; !ok {
-				result[key.Formula] = make(map[string]float64)
-			}
-			result[key.Formula][key.State] = value
-		}
-	}
-
-	return result
-}
-
-// Normalize scales all calculation results by the given normalization limit
-func (cr CalculationResults) Normalize(serviceNormalizationLimit float64) {
-	for key, value := range cr {
-		cr[key] = value / serviceNormalizationLimit
-	}
 }
 
 type ContractState struct {
@@ -281,7 +245,8 @@ func (c *ContractState) RegisterService(service string, contracts []CalculationC
 		sanitizedFormula := sanitizeFormula(contract.Formula, contract.State)
 		key := ContractKey{Service: service, Formula: sanitizedFormula}
 
-		// Set processor name for the contract
+		// Set processor name for the contract and update formula
+		contract.Formula = sanitizedFormula
 		contract.Processor = c.processorName
 		contract.Service = service
 
@@ -586,39 +551,6 @@ func filterMetricsFromFormula(formula string) map[string]bool {
 	}
 	return res
 }
-
-// Extract states from formula for each metric
-// If a metric doesn't have an explicit state in the formula, use the defaultState
-/*func extractStatesFromFormula(formula string, defaultState string) map[string]bool {
-	matches := metricRegex.FindAllStringSubmatch(formula, -1)
-	metricStates := make(map[string]bool)
-
-	for _, match := range matches {
-		if len(match) < 2 {
-			continue
-		}
-
-		metric := match[1]
-
-		// Initialize state map for this metric if not already present
-		if _, exists := metricStates[metric]; !exists {
-			metricStates[metric] = make(map[string]bool)
-		}
-
-		// If custom state is specified in formula, use it
-		if len(match) > 3 && match[3] != "" {
-			customState := match[3]
-			metricStates[metric][customState] = true
-		} else {
-			// Otherwise use all default states
-			for state := range defaultStates {
-				metricStates[metric][state] = true
-			}
-		}
-	}
-
-	return metricStates
-}*/
 
 // Sanitize formula by adding default states where missing
 func sanitizeFormula(formula string, defaultState string) string {
