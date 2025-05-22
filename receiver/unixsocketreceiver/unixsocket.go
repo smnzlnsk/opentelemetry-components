@@ -135,6 +135,9 @@ func (usr *unixSocketReceiver) receiveMetrics(socketPath string, conn net.Conn) 
 		usr.mu.Lock()
 		delete(usr.connections, socketPath)
 		usr.mu.Unlock()
+
+		// Attempt to reconnect after a delay
+		go usr.reconnectWithBackoff(socketPath)
 	}()
 
 	ctx := context.Background()
@@ -173,9 +176,46 @@ func (usr *unixSocketReceiver) receiveMetrics(socketPath string, conn net.Conn) 
 			if len(data) > 0 {
 				usr.processReceivedData(ctx, data, socketPath, protoUnmarshaler, jsonUnmarshaler)
 			} else {
-				usr.logger.Info("No data received from socket", zap.String("socket", socketPath))
+				usr.logger.Debug("No data received from socket", zap.String("socket", socketPath))
 			}
 		}
+	}
+}
+
+// reconnectWithBackoff attempts to reconnect to a socket with exponential backoff
+func (usr *unixSocketReceiver) reconnectWithBackoff(socketPath string) {
+	backoff := 1 * time.Second
+	maxBackoff := 30 * time.Second
+	retries := 0
+
+	for {
+		// Wait before attempting to reconnect
+		time.Sleep(backoff)
+
+		usr.logger.Info("Attempting to reconnect to unix socket",
+			zap.String("socket", socketPath),
+			zap.Duration("backoff", backoff),
+			zap.Int("retry", retries+1))
+
+		// Check if the socket file exists
+		if _, err := net.Dial("unix", socketPath); err != nil {
+			usr.logger.Debug("Socket not available for reconnection",
+				zap.String("socket", socketPath),
+				zap.Error(err))
+
+			// Increase backoff with exponential strategy
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+
+			retries++
+			continue
+		}
+
+		// Socket is available, attempt to connect
+		usr.connectToUnixSocket(socketPath)
+		return
 	}
 }
 
