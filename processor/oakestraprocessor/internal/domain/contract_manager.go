@@ -12,6 +12,7 @@ type ContractManager interface {
 	Length() int
 	GetAllContracts() map[ContractKey]CalculationContract
 	GetDefaultContracts() map[string]CalculationContract
+	GetServiceContracts() map[ContractKey]CalculationContract
 	IsServiceRegistered(service string) bool
 }
 
@@ -75,6 +76,17 @@ func (c *contractManager) GetDefaultContracts() map[string]CalculationContract {
 	return res
 }
 
+func (c *contractManager) GetServiceContracts() map[ContractKey]CalculationContract {
+	c.rwMutex.RLock()
+	defer c.rwMutex.RUnlock()
+	res := make(map[ContractKey]CalculationContract)
+	for key, contract := range c.contracts {
+		if key.Service != "default" {
+			res[key] = contract
+		}
+	}
+	return res
+}
 func (c *contractManager) IsServiceRegistered(service string) bool {
 	c.rwMutex.RLock()
 	defer c.rwMutex.RUnlock()

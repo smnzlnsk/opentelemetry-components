@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.uber.org/zap"
 )
 
@@ -34,7 +36,7 @@ func TestContractState(t *testing.T) {
 				"[metric1] + [metric2]": {
 					Formula: "[metric1] + [metric2]",
 					Service: service,
-					States:  map[string]bool{"running": true},
+					State:   "running",
 					Metrics: map[string]bool{"metric1": true, "metric2": true},
 				},
 			}
@@ -89,7 +91,7 @@ func TestContractState(t *testing.T) {
 		service := "test-service"
 
 		// Set up default contract
-		err := cs.GenerateDefaultContract(defaultFormula, map[string]bool{"running": true})
+		err := cs.GenerateDefaultContract(defaultFormula, []string{"running"})
 		require.NoError(t, err)
 
 		// Verify default contract registration
@@ -102,7 +104,7 @@ func TestContractState(t *testing.T) {
 			"[metric1] + [metric2]": {
 				Formula: "[metric1] + [metric2]",
 				Service: service,
-				States:  map[string]bool{"running": true},
+				State:   "running",
 				Metrics: map[string]bool{"metric1": true, "metric2": true},
 			},
 		}
@@ -121,7 +123,7 @@ func TestContractState(t *testing.T) {
 
 		// Verify specific contracts exist
 		key1 := ContractKey{Service: service, Formula: "[metric1] + [metric2]"}
-		key2 := ContractKey{Service: service, Formula: "[metric3] + [metric4]"}
+		key2 := ContractKey{Service: service, Formula: defaultFormula}
 		_, err = cs.Contracts.GetContract(key1)
 		require.NoError(t, err, "Service-specific contract not found")
 		_, err = cs.Contracts.GetContract(key2)
@@ -150,7 +152,7 @@ func TestContractState(t *testing.T) {
 				formula: {
 					Formula: formula,
 					Service: service,
-					States:  map[string]bool{"state1": true, "state2": true},
+					State:   "state1",
 					Metrics: map[string]bool{"metric1": true, "metric2": true},
 				},
 			}
@@ -181,15 +183,13 @@ func TestContractState(t *testing.T) {
 
 			// Verify datapoints cleanup
 			for metric := range contracts[formula].Metrics {
-				for state := range contracts[formula].States {
-					dpKey := DatapointKey{
-						Service: service,
-						Metric:  metric,
-						State:   state,
-					}
-					_, exists := cs.Datapoints[dpKey]
-					require.False(t, exists, "Datapoint should be deleted")
+				dpKey := DatapointKey{
+					Service: service,
+					Metric:  metric,
+					State:   "state1",
 				}
+				_, exists := cs.Datapoints[dpKey]
+				require.False(t, exists, "Datapoint should be deleted")
 			}
 		})
 	})
@@ -233,7 +233,7 @@ func generateTestContracts(service string, count int) map[string]CalculationCont
 		contracts[formula] = CalculationContract{
 			Formula: formula,
 			Service: service,
-			States:  map[string]bool{"running": true},
+			State:   "running",
 			Metrics: metrics,
 		}
 	}
@@ -246,7 +246,7 @@ func TestRegisterServiceWithDefaults(t *testing.T) {
 
 	// Set up a default contract
 	defaultFormula := "[metric3] + [metric4]"
-	err := cs.GenerateDefaultContract(defaultFormula, map[string]bool{"running": true})
+	err := cs.GenerateDefaultContract(defaultFormula, []string{"running"})
 	require.NoError(t, err)
 
 	// Create service-specific contracts
@@ -254,7 +254,7 @@ func TestRegisterServiceWithDefaults(t *testing.T) {
 		"[metric1] + [metric2]": {
 			Formula: "[metric1] + [metric2]",
 			Service: service,
-			States:  map[string]bool{"running": true},
+			State:   "running",
 		},
 	}
 
@@ -273,7 +273,7 @@ func TestRegisterServiceWithDefaults(t *testing.T) {
 
 	// Verify both formulas exist
 	key1 := ContractKey{Service: service, Formula: "[metric1] + [metric2]"}
-	key2 := ContractKey{Service: service, Formula: "[metric3] + [metric4]"}
+	key2 := ContractKey{Service: service, Formula: defaultFormula}
 	_, err = cs.Contracts.GetContract(key1)
 	require.NoError(t, err, "Service-specific contract not found")
 	_, err = cs.Contracts.GetContract(key2)
@@ -323,7 +323,7 @@ func TestDeleteService(t *testing.T) {
 				tt.initialFormula: {
 					Formula: tt.initialFormula,
 					Service: tt.initialService,
-					States:  tt.initialStates,
+					State:   "state1", // Using the first state
 					Metrics: filterMetricsFromFormula(tt.initialFormula),
 				},
 			}
@@ -387,15 +387,15 @@ func TestDefaultContractHandling(t *testing.T) {
 	service := "test-service"
 
 	// Set up and verify default contract
-	err := cs.GenerateDefaultContract(defaultFormula, map[string]bool{"running": true})
+	err := cs.GenerateDefaultContract(defaultFormula, []string{"running"})
 	require.NoError(t, err)
 
 	defaultKey := ContractKey{Service: "default", Formula: defaultFormula}
 	defaultContract, err := cs.Contracts.GetContract(defaultKey)
 	require.NoError(t, err, "Default contract not registered")
 	require.Equal(t, "default", defaultContract.Service)
-	require.Equal(t, defaultFormula, defaultContract.Formula)
-	require.Contains(t, defaultContract.States, "running")
+	require.Equal(t, sanitizeFormula(defaultFormula, "running"), defaultContract.Formula)
+	require.Equal(t, "running", defaultContract.State)
 	require.Contains(t, defaultContract.Metrics, "metric3")
 	require.Contains(t, defaultContract.Metrics, "metric4")
 
@@ -404,7 +404,7 @@ func TestDefaultContractHandling(t *testing.T) {
 		"[metric1] + [metric2]": {
 			Formula: "[metric1] + [metric2]",
 			Service: service,
-			States:  map[string]bool{"running": true},
+			State:   "running",
 			Metrics: map[string]bool{"metric1": true, "metric2": true},
 		},
 	}
@@ -417,7 +417,7 @@ func TestDefaultContractHandling(t *testing.T) {
 	serviceContract, err := cs.Contracts.GetContract(serviceDefaultKey)
 	require.NoError(t, err, "Default contract not copied to service")
 	require.Equal(t, service, serviceContract.Service)
-	require.Equal(t, defaultFormula, serviceContract.Formula)
+	require.Equal(t, sanitizeFormula(defaultFormula, "running"), serviceContract.Formula)
 
 	// Verify filters include metrics from both contracts
 	expectedMetrics := []string{"metric1", "metric2", "metric3", "metric4"}
@@ -450,7 +450,7 @@ func TestServiceRegistration(t *testing.T) {
 			"[metric1] + [metric2]": {
 				Formula: "[metric1] + [metric2]",
 				Service: service,
-				States:  map[string]bool{"running": true, "stopped": true},
+				State:   "running",
 				Metrics: map[string]bool{"metric1": true, "metric2": true},
 			},
 		}
@@ -463,14 +463,13 @@ func TestServiceRegistration(t *testing.T) {
 		contract, err := cs.Contracts.GetContract(key)
 		require.NoError(t, err)
 		require.Equal(t, service, contract.Service)
-		require.Equal(t, 2, len(contract.States))
+		require.Equal(t, "running", contract.State)
 
 		// Verify filters
 		for metric := range contract.Metrics {
 			filter, exists := cs.Filters.MetricFiltersMap()[metric]
 			require.True(t, exists)
 			require.Greater(t, filter.StateFilter["running"], 0)
-			require.Greater(t, filter.StateFilter["stopped"], 0)
 		}
 	})
 
@@ -481,13 +480,13 @@ func TestServiceRegistration(t *testing.T) {
 			"[metric1] + [metric2]": {
 				Formula: "[metric1] + [metric2]",
 				Service: service,
-				States:  map[string]bool{"running": true},
+				State:   "running",
 				Metrics: map[string]bool{"metric1": true, "metric2": true},
 			},
 			"[metric2] + [metric3]": {
 				Formula: "[metric2] + [metric3]",
 				Service: service,
-				States:  map[string]bool{"running": true},
+				State:   "running",
 				Metrics: map[string]bool{"metric2": true, "metric3": true},
 			},
 		}
@@ -507,31 +506,32 @@ func TestContractState_Comprehensive(t *testing.T) {
 		cs := NewContractState("test", zap.NewNop(), nil)
 
 		t.Run("empty default contract", func(t *testing.T) {
-			err := cs.GenerateDefaultContract("", map[string]bool{})
+			err := cs.GenerateDefaultContract("", []string{})
 			require.Error(t, err, "Should not allow empty formula")
 		})
 
 		t.Run("invalid formula", func(t *testing.T) {
-			err := cs.GenerateDefaultContract("[metric1] ++ [metric2]", map[string]bool{"running": true})
+			err := cs.GenerateDefaultContract("[metric1] ++ [metric2]", []string{"running"})
 			require.Error(t, err, "Should not allow invalid formula")
 		})
 
 		t.Run("valid default contract", func(t *testing.T) {
 			formula := "[metric1] + [metric2]"
-			err := cs.GenerateDefaultContract(formula, map[string]bool{"running": true})
+			err := cs.GenerateDefaultContract(formula, []string{"running"})
 			require.NoError(t, err)
 
-			key := ContractKey{Service: "default", Formula: formula}
+			key := ContractKey{Service: "default", Formula: sanitizeFormula(formula, "running")}
 			contract, err := cs.Contracts.GetContract(key)
 			require.NoError(t, err)
 			require.Equal(t, "default", contract.Service)
+			require.Equal(t, sanitizeFormula(formula, "running"), contract.Formula)
 			require.Contains(t, contract.Metrics, "metric1")
 			require.Contains(t, contract.Metrics, "metric2")
 		})
 
 		t.Run("duplicate default contract", func(t *testing.T) {
 			formula := "[metric3] + [metric4]"
-			err := cs.GenerateDefaultContract(formula, map[string]bool{"running": true})
+			err := cs.GenerateDefaultContract(formula, []string{"running"})
 			require.NoError(t, err, "Should allow multiple default contracts")
 
 			count := 0
@@ -586,7 +586,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 				"[metric1]": {
 					Formula: "[metric1]",
 					Service: "service1",
-					States:  map[string]bool{"running": true, "stopped": true},
+					State:   "running",
 					Metrics: map[string]bool{"metric1": true},
 				},
 			}, "100")
@@ -597,7 +597,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 				"[metric1]": {
 					Formula: "[metric1]",
 					Service: "service2",
-					States:  map[string]bool{"running": true, "paused": true},
+					State:   "running",
 					Metrics: map[string]bool{"metric1": true},
 				},
 			}, "100")
@@ -607,8 +607,6 @@ func TestContractState_Comprehensive(t *testing.T) {
 			require.True(t, exists)
 			require.Equal(t, 2, filter.ActiveContracts())
 			require.Greater(t, filter.StateFilter["running"], 0)
-			require.Greater(t, filter.StateFilter["stopped"], 0)
-			require.Greater(t, filter.StateFilter["paused"], 0)
 		})
 
 		t.Run("metric cleanup", func(t *testing.T) {
@@ -619,7 +617,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 				"[metric1] + [metric2]": {
 					Formula: "[metric1] + [metric2]",
 					Service: "service1",
-					States:  map[string]bool{"running": true},
+					State:   "running",
 					Metrics: map[string]bool{"metric1": true, "metric2": true},
 				},
 			}, "100")
@@ -647,7 +645,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 				"[metric1]": {
 					Formula: "[metric1]",
 					Service: service,
-					States:  map[string]bool{"running": true},
+					State:   "running",
 					Metrics: map[string]bool{"metric1": true},
 				},
 			}, "100")
@@ -675,7 +673,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 		cs := NewContractState("test", zap.NewNop(), nil)
 
 		// Add default contract
-		err := cs.GenerateDefaultContract("[metric1]", map[string]bool{"running": true})
+		err := cs.GenerateDefaultContract("[metric1]", []string{"running"})
 		require.NoError(t, err)
 
 		var wg sync.WaitGroup
@@ -690,7 +688,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 					"[metric2]": {
 						Formula: "[metric2]",
 						Service: svc,
-						States:  map[string]bool{"running": true},
+						State:   "running",
 						Metrics: map[string]bool{"metric2": true},
 					},
 				}
@@ -710,4 +708,208 @@ func TestContractState_Comprehensive(t *testing.T) {
 		}
 		require.Equal(t, len(services)*2, serviceCount, "Each service should have two contracts (default + specific)")
 	})
+}
+
+func TestFormulaParsingWithStates(t *testing.T) {
+	t.Run("filter metrics from formula", func(t *testing.T) {
+		tests := []struct {
+			name            string
+			formula         string
+			expectedMetrics map[string]bool
+		}{
+			{
+				name:    "simple formula",
+				formula: "[metric1] + [metric2]",
+				expectedMetrics: map[string]bool{
+					"metric1": true,
+					"metric2": true,
+				},
+			},
+			{
+				name:    "formula with states",
+				formula: "[metric1{in}] + [metric2{out}]",
+				expectedMetrics: map[string]bool{
+					"metric1": true,
+					"metric2": true,
+				},
+			},
+			{
+				name:    "formula with age",
+				formula: "[metric1(2)] + [metric2]",
+				expectedMetrics: map[string]bool{
+					"metric1": true,
+					"metric2": true,
+				},
+			},
+			{
+				name:    "formula with states and age",
+				formula: "[metric1(2){in}] + [metric2{out}]",
+				expectedMetrics: map[string]bool{
+					"metric1": true,
+					"metric2": true,
+				},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := filterMetricsFromFormula(tt.formula)
+				assert.Equal(t, tt.expectedMetrics, result)
+			})
+		}
+	})
+
+	t.Run("extract states from formula", func(t *testing.T) {
+		tests := []struct {
+			name              string
+			formula           string
+			expectedArguments []CalculationArgument
+		}{
+			{
+				name:    "simple formula with default state",
+				formula: "[metric1] + [metric2]",
+				expectedArguments: []CalculationArgument{
+					{Metric: "metric1", State: "", Age: 0},
+					{Metric: "metric2", State: "", Age: 0},
+				},
+			},
+			{
+				name:    "formula with custom states",
+				formula: "[metric1{in}] + [metric2{out}]",
+				expectedArguments: []CalculationArgument{
+					{Metric: "metric1", State: "in", Age: 0},
+					{Metric: "metric2", State: "out", Age: 0},
+				},
+			},
+			{
+				name:    "formula with age",
+				formula: "[metric1(2)] + [metric2]",
+				expectedArguments: []CalculationArgument{
+					{Metric: "metric1", State: "", Age: 2},
+					{Metric: "metric2", State: "", Age: 0},
+				},
+			},
+			{
+				name:    "formula with states and age",
+				formula: "[metric1(2){in}] + [metric2{out}]",
+				expectedArguments: []CalculationArgument{
+					{Metric: "metric1", State: "in", Age: 2},
+					{Metric: "metric2", State: "out", Age: 0},
+				},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := getCalculationArguments(tt.formula)
+				require.Equal(t, len(tt.expectedArguments), len(result), "Argument count mismatch")
+
+				// Create maps for easier comparison (since order might not matter)
+				resultMap := make(map[string]CalculationArgument)
+				for _, arg := range result {
+					resultMap[arg.Metric] = arg
+				}
+
+				expectedMap := make(map[string]CalculationArgument)
+				for _, arg := range tt.expectedArguments {
+					expectedMap[arg.Metric] = arg
+				}
+
+				for metric, expectedArg := range expectedMap {
+					actualArg, exists := resultMap[metric]
+					require.True(t, exists, "Expected metric %s not found in results", metric)
+					assert.Equal(t, expectedArg.State, actualArg.State, "State mismatch for metric %s", metric)
+					assert.Equal(t, expectedArg.Age, actualArg.Age, "Age mismatch for metric %s", metric)
+				}
+			})
+		}
+	})
+
+	t.Run("sanitize formula", func(t *testing.T) {
+		tests := []struct {
+			name            string
+			formula         string
+			defaultState    string
+			expectedFormula string
+		}{
+			{
+				name:            "simple formula",
+				formula:         "[metric1] + [metric2]",
+				defaultState:    "default",
+				expectedFormula: "[metric1(0){default}] + [metric2(0){default}]",
+			},
+			{
+				name:            "formula with some states",
+				formula:         "[metric1{in}] + [metric2]",
+				defaultState:    "out",
+				expectedFormula: "[metric1(0){in}] + [metric2(0){out}]",
+			},
+			{
+				name:            "formula with ages",
+				formula:         "[metric1(2)] + [metric2]",
+				defaultState:    "default",
+				expectedFormula: "[metric1(2){default}] + [metric2(0){default}]",
+			},
+			{
+				name:            "formula with states and ages",
+				formula:         "[metric1(2){in}] + [metric2]",
+				defaultState:    "out",
+				expectedFormula: "[metric1(2){in}] + [metric2(0){out}]",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := sanitizeFormula(tt.formula, tt.defaultState)
+				assert.Equal(t, tt.expectedFormula, result)
+			})
+		}
+	})
+}
+
+func TestContractState_FullWorkflow(t *testing.T) {
+	cs := NewContractState("test", zap.NewNop(), nil)
+	cs.GenerateDefaultContract("[container.metric1(0){in}] + [container.metric1{out}] + [container.metric2]", []string{"in", "out"})
+	cs.RegisterService("full.service.name.instance.0", map[string]CalculationContract{}, "100")
+
+	ms := []struct {
+		metricName string
+		datapoints map[string]float64
+	}{
+		{
+			metricName: "container.metric1",
+			datapoints: map[string]float64{
+				"in":  10,
+				"out": 20,
+			},
+		},
+		{
+			metricName: "container.metric2",
+			datapoints: map[string]float64{
+				"in":  30,
+				"out": 40,
+			},
+		},
+	}
+	metrics := pmetric.NewMetrics()
+	resourceMetrics := metrics.ResourceMetrics().AppendEmpty()
+	resourceMetrics.Resource().Attributes().PutStr("container_id", "full.service.name.instance.0")
+	resourceMetrics.Resource().Attributes().PutStr("service.name", "test")
+	scopeMetrics := resourceMetrics.ScopeMetrics().AppendEmpty()
+
+	for _, m := range ms {
+		metric := scopeMetrics.Metrics().AppendEmpty()
+		metric.SetName(m.metricName)
+		metric.SetEmptySum()
+		dp := metric.Sum().DataPoints()
+		for state, value := range m.datapoints {
+			dp := dp.AppendEmpty()
+			dp.SetTimestamp(pcommon.Timestamp(time.Now().UnixNano()))
+			dp.Attributes().PutStr("state", state)
+			dp.SetDoubleValue(value)
+		}
+	}
+	cs.PopulateData(metrics)
+
+	_ = cs.Evaluate()
 }

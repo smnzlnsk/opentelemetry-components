@@ -7,8 +7,8 @@ import (
 
 type MetricFilter interface {
 	MetricFiltersMap() map[string]*metricFilterStruct
-	AddMetricFilter(string, map[string]bool) error
-	DeleteMetricFilter(string, map[string]bool) error
+	AddMetricFilter(string, string) error
+	DeleteMetricFilter(string, string) error
 }
 
 type filter struct {
@@ -27,34 +27,36 @@ func (f *filter) MetricFiltersMap() map[string]*metricFilterStruct {
 	return f.MetricFilters
 }
 
-func (f *filter) AddMetricFilter(key string, states map[string]bool) error {
-	// if the key contains a |, we only want to work with the left part
-	if strings.Contains(key, "|") {
-		parts := strings.Split(key, "|")
+func (f *filter) AddMetricFilter(key string, state string) error {
+	// If the key contains parentheses for age, remove them
+	if strings.Contains(key, "(") {
+		parts := strings.Split(key, "(")
 		key = parts[0]
 	}
+
 	if mf, exists := f.MetricFilters[key]; exists {
 		// Increment activeContracts for overlapping metrics
 		mf.activeContracts++
 		// set states where necessary
-		mf.addStates(states)
+		mf.addState(state)
 		return nil
 	}
 	mfs := newMetricFilterStruct()
-	mfs.addStates(states)
+	mfs.addState(state)
 	f.MetricFilters[key] = mfs
 	return nil
 }
 
-func (f *filter) DeleteMetricFilter(key string, states map[string]bool) error {
-	// if the key contains a |, we only want to work with the left part
-	if strings.Contains(key, "|") {
-		parts := strings.Split(key, "|")
+func (f *filter) DeleteMetricFilter(key string, state string) error {
+	// If the key contains parentheses for age, remove them
+	if strings.Contains(key, "(") {
+		parts := strings.Split(key, "(")
 		key = parts[0]
 	}
+
 	if mfs, exists := f.MetricFilters[key]; exists {
 		// First remove states
-		mfs.removeStates(states)
+		mfs.removeState(state)
 
 		// Only decrement activeContracts if all states are removed
 		if len(mfs.StateFilter) == 0 {
@@ -81,22 +83,18 @@ func (mfs *metricFilterStruct) ActiveContracts() int {
 	return mfs.activeContracts
 }
 
-func (mfs *metricFilterStruct) addStates(states map[string]bool) {
+func (mfs *metricFilterStruct) addState(state string) {
 	mfs.mu.Lock()
 	defer mfs.mu.Unlock()
-	for state := range states {
-		mfs.StateFilter[state]++
-	}
+	mfs.StateFilter[state]++
 }
 
-func (mfs *metricFilterStruct) removeStates(states map[string]bool) {
+func (mfs *metricFilterStruct) removeState(state string) {
 	mfs.mu.Lock()
 	defer mfs.mu.Unlock()
-	for state := range states {
-		mfs.StateFilter[state]--
-		if mfs.StateFilter[state] <= 0 {
-			delete(mfs.StateFilter, state)
-		}
+	mfs.StateFilter[state]--
+	if mfs.StateFilter[state] <= 0 {
+		delete(mfs.StateFilter, state)
 	}
 }
 

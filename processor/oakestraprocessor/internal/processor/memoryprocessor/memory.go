@@ -79,10 +79,13 @@ func (c *MemoryMetricProcessor) Start(ctx context.Context, _ component.Host) err
 	// sync contracts
 	c.contracts.Sync()
 
-	defaultContracts := []domain.CalculationContract{
+	defaultContracts := []struct {
+		Formula string
+		States  []string
+	}{
 		{
 			Formula: "([container.memory.usage] / [system.memory.usage]) * 1000000",
-			States:  map[string]bool{"slab_reclaimable": true, "slab_unreclaimable": true, "used": true},
+			States:  []string{"slab_reclaimable", "slab_unreclaimable", "used"},
 		},
 	}
 

@@ -30,7 +30,9 @@ func TestMetricFilterStruct(t *testing.T) {
 			"stopped": true,
 		}
 
-		mfs.addStates(states)
+		for state := range states {
+			mfs.addState(state)
+		}
 
 		expectedCounts := map[string]int{
 			"running": 1,
@@ -49,7 +51,7 @@ func TestMetricFilterStruct(t *testing.T) {
 			mfs.StateFilter["running"] = 2
 			mfs.StateFilter["stopped"] = 1
 
-			mfs.removeStates(map[string]bool{"running": true})
+			mfs.removeState("running")
 
 			if count := mfs.StateFilter["running"]; count != 1 {
 				t.Errorf("Expected running state count to be 1, got %d", count)
@@ -63,7 +65,7 @@ func TestMetricFilterStruct(t *testing.T) {
 			mfs := newMetricFilterStruct()
 			mfs.StateFilter["running"] = 1
 
-			mfs.removeStates(map[string]bool{"running": true})
+			mfs.removeState("running")
 
 			if _, exists := mfs.StateFilter["running"]; exists {
 				t.Error("running state should have been removed")
@@ -74,7 +76,7 @@ func TestMetricFilterStruct(t *testing.T) {
 			mfs := newMetricFilterStruct()
 			mfs.StateFilter["running"] = 1
 
-			mfs.removeStates(map[string]bool{"stopped": true})
+			mfs.removeState("stopped")
 
 			if count := mfs.StateFilter["running"]; count != 1 {
 				t.Errorf("Expected running state count to be 1, got %d", count)
@@ -86,9 +88,8 @@ func TestMetricFilterStruct(t *testing.T) {
 		mfs := newMetricFilterStruct()
 
 		// Add states multiple times
-		states := map[string]bool{"running": true}
-		mfs.addStates(states)
-		mfs.addStates(states)
+		mfs.addState("running")
+		mfs.addState("running")
 
 		// Verify count is 2
 		if count := mfs.StateFilter["running"]; count != 2 {
@@ -96,7 +97,7 @@ func TestMetricFilterStruct(t *testing.T) {
 		}
 
 		// Remove state once
-		mfs.removeStates(states)
+		mfs.removeState("running")
 
 		// Verify count is 1
 		if count := mfs.StateFilter["running"]; count != 1 {
@@ -104,7 +105,7 @@ func TestMetricFilterStruct(t *testing.T) {
 		}
 
 		// Remove state again
-		mfs.removeStates(states)
+		mfs.removeState("running")
 
 		// Verify state was removed
 		if _, exists := mfs.StateFilter["running"]; exists {
@@ -128,9 +129,11 @@ func TestFilter(t *testing.T) {
 		f := NewFilter()
 		states := map[string]bool{"running": true, "stopped": true}
 
-		err := f.AddMetricFilter("cpu_usage", states)
-		if err != nil {
-			t.Errorf("Failed to add metric filter: %v", err)
+		for state := range states {
+			err := f.AddMetricFilter("cpu_usage", state)
+			if err != nil {
+				t.Errorf("Failed to add metric filter: %v", err)
+			}
 		}
 
 		// Verify metric was added
@@ -156,12 +159,14 @@ func TestFilter(t *testing.T) {
 			f := NewFilter()
 			states := map[string]bool{"running": true, "stopped": true}
 
-			err := f.AddMetricFilter("cpu_usage", states)
-			if err != nil {
-				t.Fatalf("Failed to add metric filter: %v", err)
+			for state := range states {
+				err := f.AddMetricFilter("cpu_usage", state)
+				if err != nil {
+					t.Fatalf("Failed to add metric filter: %v", err)
+				}
 			}
 
-			err = f.DeleteMetricFilter("cpu_usage", map[string]bool{"running": true})
+			err := f.DeleteMetricFilter("cpu_usage", "running")
 			if err != nil {
 				t.Errorf("Failed to delete state: %v", err)
 			}
@@ -184,7 +189,7 @@ func TestFilter(t *testing.T) {
 
 		t.Run("delete non-existent metric", func(t *testing.T) {
 			f := NewFilter()
-			err := f.DeleteMetricFilter("nonexistent", map[string]bool{"running": true})
+			err := f.DeleteMetricFilter("nonexistent", "running")
 			if err != nil {
 				t.Errorf("Failed to handle non-existent metric deletion: %v", err)
 			}
@@ -200,20 +205,26 @@ func BenchmarkFilter(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			metricName := fmt.Sprintf("cpu_usage_%d", i)
-			_ = f.AddMetricFilter(metricName, states)
+			for state := range states {
+				_ = f.AddMetricFilter(metricName, state)
+			}
 		}
 	})
 
 	b.Run("update existing metric filter", func(b *testing.B) {
 		f := NewFilter()
 		states := map[string]bool{"running": true}
-		_ = f.AddMetricFilter("cpu_usage", states)
+		for state := range states {
+			_ = f.AddMetricFilter("cpu_usage", state)
+		}
 
 		newStates := map[string]bool{"running": true, "stopped": true}
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_ = f.AddMetricFilter("cpu_usage", newStates)
+			for state := range newStates {
+				_ = f.AddMetricFilter("cpu_usage", state)
+			}
 		}
 	})
 }
@@ -228,7 +239,9 @@ func BenchmarkMetricFilterStruct(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			mfs := newMetricFilterStruct()
-			mfs.addStates(states)
+			for state := range states {
+				mfs.addState(state)
+			}
 		}
 	})
 
@@ -241,7 +254,9 @@ func BenchmarkMetricFilterStruct(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			mfs := newMetricFilterStruct()
-			mfs.addStates(states)
+			for state := range states {
+				mfs.addState(state)
+			}
 		}
 	})
 
@@ -254,8 +269,12 @@ func BenchmarkMetricFilterStruct(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			mfs := newMetricFilterStruct()
-			mfs.addStates(states)
-			mfs.removeStates(states)
+			for state := range states {
+				mfs.addState(state)
+			}
+			for state := range states {
+				mfs.removeState(state)
+			}
 		}
 	})
 
@@ -267,10 +286,18 @@ func BenchmarkMetricFilterStruct(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				mfs.addStates(states1)
-				mfs.addStates(states2)
-				mfs.removeStates(states1)
-				mfs.removeStates(states2)
+				for state := range states1 {
+					mfs.addState(state)
+				}
+				for state := range states2 {
+					mfs.addState(state)
+				}
+				for state := range states1 {
+					mfs.removeState(state)
+				}
+				for state := range states2 {
+					mfs.removeState(state)
+				}
 			}
 		})
 	})
@@ -299,7 +326,9 @@ func BenchmarkFilterScenarios(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				for j := 0; j < scenario.metricCount; j++ {
 					metricName := fmt.Sprintf("metric_%d", j)
-					_ = f.AddMetricFilter(metricName, states)
+					for state := range states {
+						_ = f.AddMetricFilter(metricName, state)
+					}
 				}
 			}
 		})

@@ -80,10 +80,13 @@ func (c *CPUMetricProcessor) Start(ctx context.Context, _ component.Host) error 
 	// sync contracts
 	c.contracts.Sync()
 
-	defaultContracts := []domain.CalculationContract{
+	defaultContracts := []struct {
+		Formula string
+		States  []string
+	}{
 		{
-			Formula: "((([container.cpu.time|0] - [container.cpu.time|1]) / 1000000000) / ([system.cpu.time|0] - [system.cpu.time|1])) * 100",
-			States:  map[string]bool{"user": true, "system": true},
+			Formula: "((([container.cpu.time(0)] - [container.cpu.time(1)]) / 1000000000) / ([system.cpu.time(0)] - [system.cpu.time(1)])) * 100",
+			States:  []string{"user", "system"},
 		},
 	}
 

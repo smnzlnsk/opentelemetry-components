@@ -28,7 +28,7 @@ type CalculationResultKey struct {
 }
 
 // CalculationParameters map[state][metric]metricValue
-type CalculationParameters map[string]map[string]interface{}
+type CalculationParameters map[string]interface{}
 
 // CalculationResults maps result keys to calculated values
 type CalculationResults map[CalculationResultKey]float64
@@ -140,32 +140,32 @@ func (c *ContractState) Sync() {
 		// TODO: Implement contract population logic
 		// Here we should re-populate the contracts from the database
 		// This is to ensure proper functionality in case of a restart or crash
-		contracts, err := c.service.GetContractsForProcessor(context.Background(), c.processorName)
+		documents, err := c.service.GetContractsForProcessor(context.Background(), c.processorName)
 		if err != nil {
 			c.logger.Error("Failed to get contracts for processor", zap.Error(err))
 			return
 		}
 
-		for _, documents := range contracts {
-			for _, contract := range documents.Contracts {
+		for _, document := range documents {
+			for _, contract := range document.Contracts {
 				k := ContractKey{Service: contract.Service, Formula: contract.Formula}
 
-				// add contract to the state
+				// Add contract to the state
 				c.Contracts.AddContract(contract)
 
-				// add filters for the contract
-				for metric := range contract.Metrics {
-					c.Filters.AddMetricFilter(metric, contract.States)
+				for _, argument := range contract.Arguments {
+					// Add filters for the contract
+					c.Filters.AddMetricFilter(argument.Metric, argument.State)
 				}
 
-				// compile the formula
+				// Compile the formula
 				expr, err := govaluate.NewEvaluableExpression(contract.Formula)
 				if err != nil {
 					c.logger.Error("Failed to compile formula", zap.Error(err))
 					continue
 				}
 
-				// add compiled formula to the state
+				// Add compiled formula to the state
 				c.compiledExpressions[k] = expr
 			}
 		}
@@ -179,28 +179,48 @@ func (c *ContractState) GetDefaultContracts() map[string]CalculationContract {
 	return c.Contracts.GetDefaultContracts()
 }
 
-func (c *ContractState) GenerateDefaultContract(formula string, states map[string]bool) error {
-	expr, err := govaluate.NewEvaluableExpression(formula)
-	if err != nil {
-		return fmt.Errorf("invalid formula %s: %w", formula, err)
+func (c *ContractState) GenerateDefaultContract(formula string, states []string) error {
+	if formula == "" {
+		return fmt.Errorf("formula cannot be empty")
 	}
 
-	key := ContractKey{
-		Service: "default",
-		Formula: formula,
+	if states == nil {
+		return fmt.Errorf("states cannot be nil")
 	}
+	// Loop through the states and generate a default contract for each state
+	for _, state := range states {
+		// Sanitize the formula to add default states where missing
+		sanitizedFormula := sanitizeFormula(formula, state)
+		expr, err := govaluate.NewEvaluableExpression(sanitizedFormula)
+		if err != nil {
+			return fmt.Errorf("invalid formula %s: %w", sanitizedFormula, err)
+		}
 
-	contract := CalculationContract{
-		Processor: c.processorName,
-		Formula:   formula,
-		Service:   "default",
-		States:    states,
-		Metrics:   filterMetricsFromFormula(formula),
+		key := ContractKey{
+			Service: "default",
+			Formula: formula,
+		}
+
+		arguments := getCalculationArguments(sanitizedFormula)
+		contract := CalculationContract{
+			Processor: c.processorName,
+			Formula:   sanitizedFormula,
+			Service:   "default",
+			State:     state,
+			Metrics:   filterMetricsFromFormula(sanitizedFormula),
+			Arguments: arguments,
+		}
+
+		c.Contracts.AddContract(contract)
+		c.compiledExpressions[key] = expr
+
+		// Add metrics to filters
+		for _, argument := range arguments {
+			if err := c.Filters.AddMetricFilter(argument.Metric, argument.State); err != nil {
+				return err
+			}
+		}
 	}
-
-	c.Contracts.AddContract(contract)
-	c.compiledExpressions[key] = expr
-
 	return nil
 }
 
@@ -229,6 +249,7 @@ func (c *ContractState) RegisterService(service string, contracts map[string]Cal
 
 	// First register default contracts for this service
 	for formula, contract := range c.Contracts.GetDefaultContracts() {
+
 		serviceKey := ContractKey{
 			Service: service,
 			Formula: formula,
@@ -237,6 +258,7 @@ func (c *ContractState) RegisterService(service string, contracts map[string]Cal
 		serviceContract := contract
 		serviceContract.Service = service
 		serviceContract.Processor = c.processorName
+
 		normalisedFormula := fmt.Sprintf("(%s) / %f", formula, normValue)
 		expr, err := govaluate.NewEvaluableExpression(normalisedFormula)
 		if err != nil {
@@ -246,9 +268,11 @@ func (c *ContractState) RegisterService(service string, contracts map[string]Cal
 		c.Contracts.AddContract(serviceContract)
 		c.compiledExpressions[serviceKey] = expr
 
-		// Update filters for default contract metrics
-		for metric := range serviceContract.Metrics {
-			if err := c.Filters.AddMetricFilter(metric, serviceContract.States); err != nil {
+		// Update filters for default contract metrics with states
+		arguments := getCalculationArguments(formula)
+		for _, argument := range arguments {
+			fmt.Printf("Adding metric filter: %s, %s\n", argument.Metric, argument.State)
+			if err := c.Filters.AddMetricFilter(argument.Metric, argument.State); err != nil {
 				return err
 			}
 		}
@@ -256,13 +280,15 @@ func (c *ContractState) RegisterService(service string, contracts map[string]Cal
 
 	// Then register service-specific contracts
 	for formula, contract := range contracts {
-		key := ContractKey{Service: service, Formula: formula}
+		sanitizedFormula := sanitizeFormula(formula, contract.State)
+		key := ContractKey{Service: service, Formula: sanitizedFormula}
 
 		// Set processor name for the contract
 		contract.Processor = c.processorName
 		contract.Service = service
 
-		normalisedFormula := fmt.Sprintf("(%s) / %f", formula, normValue)
+		normalisedFormula := fmt.Sprintf("(%s) / %f", sanitizedFormula, normValue)
+
 		expr, err := govaluate.NewEvaluableExpression(normalisedFormula)
 		if err != nil {
 			return fmt.Errorf("invalid formula %s: %w", formula, err)
@@ -271,9 +297,10 @@ func (c *ContractState) RegisterService(service string, contracts map[string]Cal
 		c.Contracts.AddContract(contract)
 		c.compiledExpressions[key] = expr
 
-		// Update filters
-		for metric := range contract.Metrics {
-			if err := c.Filters.AddMetricFilter(metric, contract.States); err != nil {
+		// Update filters with metric states
+		arguments := getCalculationArguments(formula)
+		for _, argument := range arguments {
+			if err := c.Filters.AddMetricFilter(argument.Metric, argument.State); err != nil {
 				return err
 			}
 		}
@@ -293,8 +320,8 @@ func (c *ContractState) DeleteService(service string) error {
 	for key, contract := range c.Contracts.GetAllContracts() {
 		if key.Service == service {
 			// Remove filters for this contract's metrics
-			for metric := range contract.Metrics {
-				c.Filters.DeleteMetricFilter(metric, contract.States)
+			for _, argument := range contract.Arguments {
+				c.Filters.DeleteMetricFilter(argument.Metric, argument.State)
 			}
 			c.Contracts.DeleteContract(contract)
 			delete(c.compiledExpressions, key)
@@ -323,7 +350,7 @@ func (c *ContractState) RemoveContract(service string) error {
 		if key.Service == service {
 			// Remove filters for this contract's metrics
 			for metric := range contract.Metrics {
-				c.Filters.DeleteMetricFilter(metric, contract.States)
+				c.Filters.DeleteMetricFilter(metric, contract.State)
 			}
 			c.Contracts.DeleteContract(contract)
 			delete(c.compiledExpressions, key)
@@ -351,7 +378,6 @@ func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
 			serviceName = cid.Str()
 			containerMetric = true
 		}
-
 		// Skip if no service name found and it's not a system metric
 		if serviceName == "" && containerMetric {
 			continue
@@ -407,10 +433,8 @@ func (c *ContractState) PopulateData(metrics pmetric.Metrics) error {
 						State:   state,
 					}
 
-					// Check if the key's slice exists, if not create it
 					if _, exists := c.Datapoints[key]; !exists {
 						c.Datapoints[key] = make(map[int]MetricDatapoint)
-						c.indexTracker[key] = 0
 					}
 
 					// Add the new datapoint to the current index position
@@ -431,12 +455,9 @@ func (c *ContractState) Evaluate() CalculationResults {
 	c.RLock()
 	defer c.RUnlock()
 
-	// Skip default contracts in evaluation
 	serviceContracts := make(map[string][]ContractKey)
-	for key := range c.Contracts.GetAllContracts() {
-		if key.Service != "default" {
-			serviceContracts[key.Service] = append(serviceContracts[key.Service], key)
-		}
+	for key := range c.Contracts.GetServiceContracts() {
+		serviceContracts[key.Service] = append(serviceContracts[key.Service], key)
 	}
 
 	res := make(CalculationResults)
@@ -463,23 +484,21 @@ func (c *ContractState) Evaluate() CalculationResults {
 
 				c.logger.Debug("Evaluating", zap.Any("contract", contract))
 				params := c.GetParameters(contract)
-				for state, cp := range params {
-					result, err := expr.Evaluate(cp)
-					if err != nil {
-						fmt.Printf("error evaluating expression %v\n", err)
-						continue
-					}
-
-					resultKey := CalculationResultKey{
-						Service: work.service,
-						Formula: work.contractKey.Formula,
-						State:   state,
-					}
-
-					mu.Lock()
-					res[resultKey] = result.(float64)
-					mu.Unlock()
+				result, err := expr.Evaluate(params)
+				if err != nil {
+					fmt.Printf("error evaluating expression %v\n", err)
+					continue
 				}
+
+				resultKey := CalculationResultKey{
+					Service: work.service,
+					Formula: work.contractKey.Formula,
+					State:   contract.State,
+				}
+
+				mu.Lock()
+				res[resultKey] = result.(float64)
+				mu.Unlock()
 			}
 		}()
 	}
@@ -501,48 +520,72 @@ func (c *ContractState) Evaluate() CalculationResults {
 }
 
 func (c *ContractState) GetParameters(cc CalculationContract) CalculationParameters {
-	res := make(map[string]map[string]interface{})
+	res := make(map[string]interface{})
 
-	for state := range cc.States {
-		age := 0
-		res[state] = make(map[string]interface{})
-		for metric := range cc.Metrics {
-			dpMetricName := metric
+	for _, arg := range cc.Arguments {
+		// Reset service name for system metrics
+		serviceForLookup := cc.Service
+		if strings.HasPrefix(arg.Metric, "system.") {
+			serviceForLookup = ""
+		}
 
-			// Reset service name for system metrics
+		key := DatapointKey{
+			Service: serviceForLookup,
+			Metric:  arg.Metric,
+			State:   arg.State,
+		}
 
-			serviceForLookup := cc.Service
-			if strings.HasPrefix(metric, "system.") {
-				serviceForLookup = ""
-			}
-
-			if strings.Contains(metric, "|") {
-				parts := strings.Split(metric, "|")
-				metric = parts[0]
-				age, _ = strconv.Atoi(parts[1])
-				// if the metric has an index, we need to format it back as it is in the formula
-				dpMetricName = fmt.Sprintf("%s|%d", metric, age)
-			}
-
-			key := DatapointKey{
-				Service: serviceForLookup,
-				Metric:  metric,
-				State:   state,
-			}
-			dp, exists := c.getDatapoint(key, age)
-			if exists {
-				res[state][dpMetricName] = dp.Value.FloatValue
-			} else {
-				// if the datapoint does not exist, we should fallback to the default state
-				key.State = "default"
-				dp, exists = c.getDatapoint(key, age)
-				if exists {
-					c.logger.Debug("GetParameters", zap.Any("key", key), zap.Any("dp", dp), zap.Bool("exists", exists))
-					res[state][dpMetricName] = dp.Value.FloatValue
-				}
-			}
+		dp, exists := c.getDatapoint(key, arg.Age)
+		if exists {
+			res[fmt.Sprintf("%s(%d){%s}", arg.Metric, arg.Age, arg.State)] = dp.Value.FloatValue
 		}
 	}
+	/*
+		for state := range cc.States {
+			res[state] = make(map[string]interface{})
+			for metric := range cc.Metrics {
+				// Reset service name for system metrics
+				serviceForLookup := cc.Service
+				if strings.HasPrefix(metric, "system.") {
+					serviceForLookup = ""
+				}
+
+				// Extract age if present in the metric
+				age := 0
+				if strings.Contains(metric, "(") {
+					parts := strings.Split(metric, "(")
+					cleanMetric := parts[0]
+					agePart := strings.TrimSuffix(parts[1], ")")
+					parsedAge, err := strconv.Atoi(agePart)
+					if err == nil {
+						age = parsedAge
+						metric = cleanMetric
+					}
+				}
+
+				key := DatapointKey{
+					Service: serviceForLookup,
+					Metric:  metric,
+					State:   state,
+				}
+				dp, exists := c.getDatapoint(key, age)
+				if exists {
+					dpMetricName := fmt.Sprintf("%s(%d){%s}", metric, age, state)
+					fmt.Printf("Adding datapoint: %s, %v\n", dpMetricName, dp.Value.FloatValue)
+					res[state][dpMetricName] = dp.Value.FloatValue
+				} else {
+					// if the datapoint does not exist, we should fallback to the default state
+					key.State = "default"
+					dp, exists = c.getDatapoint(key, age)
+					if exists {
+						c.logger.Debug("GetParameters", zap.Any("key", key), zap.Any("dp", dp), zap.Bool("exists", exists))
+						// Even though we're using the default state datapoint,
+						// we still format the parameter name with the original state
+						res[state][fmt.Sprintf("%s(%d){%s}", metric, age, state)] = dp.Value.FloatValue
+					}
+				}
+			}
+		}*/
 	return res
 }
 
@@ -552,31 +595,103 @@ func (c *ContractState) getDatapoint(key DatapointKey, age int) (MetricDatapoint
 	if dps, exists := c.Datapoints[key]; exists {
 		currentIdx := c.indexTracker[key]
 		lookupIdx := (currentIdx - 1 - age + 5) % 5
-		dp, exists := dps[lookupIdx]
+		dp := dps[lookupIdx]
 		c.logger.Debug("getDatapoint", zap.Any("key", key), zap.Int("lookupIdx", lookupIdx), zap.Any("dp", dp), zap.Bool("exists", exists))
 		return dp, exists
 	}
 	return MetricDatapoint{}, false
 }
 
-// extract all necessary metrics from formula as a map to filter in the future
-var metricRegex = regexp.MustCompile(`\[(.*?)\]`)
+// Extract all necessary metrics from formula as a map to filter in the future
+// The regex is designed to capture metrics with optional state and age parameters
+// The regex is supposed to match against the following patterns:
+// [metric(age){state}]
+// [metric(age)]
+// [metric{state}]
+// [metric]
+// This results in 3 groups:
+// 1. The metric name
+// 2. The age (optional)
+// 3. The state (optional)
+var metricRegex = regexp.MustCompile(`\[([^\[\]{}()]+)(?:\(([^()]+)\))?(?:{([^{}]+)})?\]`)
 
 func filterMetricsFromFormula(formula string) map[string]bool {
 	matches := metricRegex.FindAllStringSubmatch(formula, -1)
 	res := make(map[string]bool, len(matches))
 
-	for _, metricName := range matches {
-		if strings.HasPrefix(metricName[1], "|") {
-			parts := strings.Split(metricName[1], "|")
-			res[parts[0]] = true
-		} else {
-			if len(metricName) > 1 {
-				res[metricName[1]] = true
-			}
+	for _, match := range matches {
+		if len(match) > 1 {
+			// Extract just the metric name (without state or age)
+			metric := match[1]
+			res[metric] = true
 		}
 	}
 	return res
+}
+
+// Extract states from formula for each metric
+// If a metric doesn't have an explicit state in the formula, use the defaultState
+/*func extractStatesFromFormula(formula string, defaultState string) map[string]bool {
+	matches := metricRegex.FindAllStringSubmatch(formula, -1)
+	metricStates := make(map[string]bool)
+
+	for _, match := range matches {
+		if len(match) < 2 {
+			continue
+		}
+
+		metric := match[1]
+
+		// Initialize state map for this metric if not already present
+		if _, exists := metricStates[metric]; !exists {
+			metricStates[metric] = make(map[string]bool)
+		}
+
+		// If custom state is specified in formula, use it
+		if len(match) > 3 && match[3] != "" {
+			customState := match[3]
+			metricStates[metric][customState] = true
+		} else {
+			// Otherwise use all default states
+			for state := range defaultStates {
+				metricStates[metric][state] = true
+			}
+		}
+	}
+
+	return metricStates
+}*/
+
+// Sanitize formula by adding default states where missing
+func sanitizeFormula(formula string, defaultState string) string {
+	return metricRegex.ReplaceAllStringFunc(formula, func(match string) string {
+		submatches := metricRegex.FindStringSubmatch(match)
+		if len(submatches) < 2 {
+			return match
+		}
+
+		metric := submatches[1]
+		hasAge := len(submatches) > 2 && submatches[2] != ""
+		hasState := len(submatches) > 3 && submatches[3] != ""
+
+		ageStr := ""
+		if hasAge {
+			ageStr = "(" + submatches[2] + ")"
+		} else {
+			ageStr = "(0)" // Add default age of 0 if no age is specified
+		}
+
+		if !hasState {
+			return "[" + metric + ageStr + "{" + defaultState + "}" + "]"
+		}
+
+		// If it has a state but no age, add the default age
+		if hasState && !hasAge {
+			return "[" + metric + ageStr + "{" + submatches[3] + "}" + "]"
+		}
+
+		return match
+	})
 }
 
 // CreateMetricDatapoint creates a MetricDatapoint from an OpenTelemetry metric
@@ -618,12 +733,27 @@ func NewCalculationContractsFromProto(service string, reqs []*pb.CalculationRequ
 		}
 
 		res[req.Formula] = CalculationContract{
-
 			Formula: req.Formula,
 			Service: service,
-			States:  states,
+			// FIXME: this is a hack to get the state from the first state in the list
+			State:   req.States[0],
 			Metrics: filterMetricsFromFormula(req.Formula),
 		}
+	}
+	return res
+}
+
+func getCalculationArguments(formula string) []CalculationArgument {
+	matches := metricRegex.FindAllStringSubmatch(formula, -1)
+	res := make([]CalculationArgument, 0, len(matches))
+
+	for _, match := range matches {
+		age, _ := strconv.Atoi(match[2])
+		res = append(res, CalculationArgument{
+			Metric: match[1],
+			Age:    age,
+			State:  match[3],
+		})
 	}
 	return res
 }
