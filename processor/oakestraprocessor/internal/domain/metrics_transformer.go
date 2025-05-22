@@ -128,11 +128,9 @@ func (t *metricsTransformer) TransformToDBHostMetrics(md pmetric.Metrics) (DBHos
 					}
 
 					// Add metric to service
-					//fmt.Println("Adding container metric to host service", host, jobName, instanceNumber, metric.Name())
 					serviceInstance.Metrics = append(serviceInstance.Metrics, *datapoint)
 				} else {
 					// Add to system metrics
-					//fmt.Println("Adding system metric to host", host, metric.Name())
 					hostMetrics.SystemMetrics = append(hostMetrics.SystemMetrics, *datapoint)
 				}
 			}

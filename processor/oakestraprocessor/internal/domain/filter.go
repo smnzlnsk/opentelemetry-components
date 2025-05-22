@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 )
@@ -28,6 +29,14 @@ func (f *filter) MetricFiltersMap() map[string]*metricFilterStruct {
 }
 
 func (f *filter) AddMetricFilter(key string, state string) error {
+	if key == "" {
+		return fmt.Errorf("key is empty")
+	}
+
+	if state == "" {
+		return fmt.Errorf("state is empty")
+	}
+
 	// If the key contains parentheses for age, remove them
 	if strings.Contains(key, "(") {
 		parts := strings.Split(key, "(")
@@ -48,6 +57,13 @@ func (f *filter) AddMetricFilter(key string, state string) error {
 }
 
 func (f *filter) DeleteMetricFilter(key string, state string) error {
+	if key == "" {
+		return fmt.Errorf("key is empty")
+	}
+
+	if state == "" {
+		return fmt.Errorf("state is empty")
+	}
 	// If the key contains parentheses for age, remove them
 	if strings.Contains(key, "(") {
 		parts := strings.Split(key, "(")

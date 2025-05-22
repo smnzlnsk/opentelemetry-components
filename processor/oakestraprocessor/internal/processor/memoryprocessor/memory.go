@@ -119,7 +119,7 @@ func newMemoryMetricProcessor(
 
 func (c *MemoryMetricProcessor) RegisterService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo, _ []*pb.CalculationRequest) error {
 	// register default services in internal contract state
-	err := c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), map[string]domain.CalculationContract{}, resource.Memory)
+	err := c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), []domain.CalculationContract{}, resource.Memory)
 	if err != nil {
 		return err
 	}

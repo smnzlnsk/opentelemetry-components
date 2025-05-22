@@ -121,7 +121,7 @@ func newCPUMetricProcessor(
 
 func (c *CPUMetricProcessor) RegisterService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo, _ []*pb.CalculationRequest) error {
 	// register service in internal contract state
-	err := c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), map[string]domain.CalculationContract{}, resource.Cpu)
+	err := c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), []domain.CalculationContract{}, resource.Cpu)
 	if err != nil {
 		return err
 	}

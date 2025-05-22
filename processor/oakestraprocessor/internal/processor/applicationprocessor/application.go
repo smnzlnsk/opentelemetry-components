@@ -109,7 +109,7 @@ func (c *ApplicationMetricProcessor) RegisterService(serviceName string, instanc
 
 	// notify contract service to create contracts
 	ctx := context.Background()
-	err = c.services.GetContractService().CreateMany(ctx, internal.FlattenMap(contracts))
+	err = c.services.GetContractService().CreateMany(ctx, contracts)
 	if err != nil {
 		return err
 	}

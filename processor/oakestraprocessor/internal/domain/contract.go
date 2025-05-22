@@ -15,12 +15,12 @@ type ContractDocument struct {
 
 // CalculationContract represents a contract for calculating metrics based on a formula
 type CalculationContract struct {
-	Processor string                // The processor this contract belongs to
-	Formula   string                // The formula to evaluate
-	Service   string                // The service this contract belongs to
-	State     string                // The output state of the contract
-	Metrics   map[string]bool       // Metrics derived from formula for later metric filtering
-	Arguments []CalculationArgument // Metrics and states derived from formula for later metric filtering
+	Processor string // The processor this contract belongs to
+	Formula   string // The formula to evaluate
+	Service   string // The service this contract belongs to
+	State     string // The output state of the contract
+	// Metrics   map[string]bool       // Metrics derived from formula for later metric filtering
+	arguments []CalculationArgument // Metrics and states derived from formula for later metric filtering
 }
 
 type CalculationArgument struct {
@@ -41,7 +41,6 @@ func (c CalculationContract) String() string {
 			"Formula: %s\n"+
 			"Service: %s\n"+
 			"State: %s\n"+
-			"Metrics: %v\n"+
 			"Arguments: %v\n",
-		c.Processor, c.Formula, c.Service, c.State, c.Metrics, c.Arguments)
+		c.Processor, c.Formula, c.Service, c.State, c.arguments)
 }
