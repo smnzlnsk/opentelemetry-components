@@ -20,14 +20,15 @@ import (
 var _ processor.Metrics = (*MultiProcessor)(nil)
 
 type MultiProcessor struct {
-	processors    []internal.MetricProcessor
-	next          consumer.Metrics
-	logger        *zap.Logger
-	cancel        context.CancelFunc
-	grpcServer    Server
-	mongodbClient *mongodb.Client
-	config        *Config
-	services      domain.Services
+	processors       []internal.MetricProcessor
+	next             consumer.Metrics
+	logger           *zap.Logger
+	cancel           context.CancelFunc
+	grpcServer       Server
+	mongodbClient    *mongodb.Client
+	config           *Config
+	services         domain.Services
+	datapointManager domain.DatapointManager
 }
 
 func newMultiProcessor(ctx context.Context, set processor.Settings, cfg *Config, next consumer.Metrics) *MultiProcessor {
@@ -40,19 +41,22 @@ func newMultiProcessor(ctx context.Context, set processor.Settings, cfg *Config,
 
 	services := service.NewServices(repositories, set.Logger)
 
-	p, err := createProcessors(ctx, set, cfg, processorFactories, services)
+	datapointManager := domain.NewDatapointManager(services.GetMetricsService())
+
+	p, err := createProcessors(ctx, set, cfg, processorFactories, services, datapointManager)
 	if err != nil {
 		set.Logger.Error(err.Error())
 		return nil
 	}
 
 	proc := &MultiProcessor{
-		processors:    p,
-		next:          next,
-		logger:        set.Logger,
-		config:        cfg,
-		services:      services,
-		mongodbClient: dbClient,
+		processors:       p,
+		next:             next,
+		logger:           set.Logger,
+		config:           cfg,
+		services:         services,
+		mongodbClient:    dbClient,
+		datapointManager: datapointManager,
 	}
 
 	// Initialize gRPC server
@@ -67,12 +71,13 @@ func createProcessors(
 	config *Config,
 	factories map[string]internal.ProcessorFactory,
 	services domain.Services,
+	dm domain.DatapointManager,
 ) ([]internal.MetricProcessor, error) {
 
 	processors := make([]internal.MetricProcessor, 0, len(config.Processors))
 
 	for key, cfg := range config.Processors {
-		metricsProcessor, err := createProcessor(ctx, set, cfg, key, factories, services)
+		metricsProcessor, err := createProcessor(ctx, set, cfg, key, factories, services, dm)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create metrics processor for key: %q: %w", key, err)
 		}
@@ -88,12 +93,13 @@ func createProcessor(
 	key string,
 	factories map[string]internal.ProcessorFactory,
 	services domain.Services,
+	dm domain.DatapointManager,
 ) (internal.MetricProcessor, error) {
 	factory := factories[key]
 	if factory == nil {
 		return nil, fmt.Errorf("unknown processor: %s", key)
 	}
-	p, err := factory.CreateMetricsProcessor(ctx, set, cfg, services)
+	p, err := factory.CreateMetricsProcessor(ctx, set, cfg, services, dm)
 	if err != nil {
 		return nil, err
 	}
@@ -152,18 +158,17 @@ func (p *MultiProcessor) Capabilities() consumer.Capabilities {
 }
 
 func (p *MultiProcessor) ConsumeMetrics(ctx context.Context, metrics pmetric.Metrics) error {
+	err := p.datapointManager.SaveMetrics(metrics)
+	if err != nil {
+		p.logger.Error("failed to save metrics to datapoint manager", zap.Error(err))
+	}
+
 	for _, subp := range p.processors {
 		err := subp.ProcessMetrics(metrics)
 		if err != nil {
 			p.logger.Error("error", zap.Error(err))
 			return err
 		}
-	}
-
-	// save metrics to database
-	err := p.services.GetMetricsService().SaveMetrics(ctx, metrics)
-	if err != nil {
-		p.logger.Error("failed to save metrics to database", zap.Error(err))
 	}
 
 	return p.next.ConsumeMetrics(ctx, metrics)

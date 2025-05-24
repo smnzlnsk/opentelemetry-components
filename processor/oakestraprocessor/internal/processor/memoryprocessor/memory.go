@@ -40,12 +40,8 @@ func (c *MemoryMetricProcessor) ProcessMetrics(metrics pmetric.Metrics) error {
 	return nil
 }
 
-func (c *MemoryMetricProcessor) processMetrics(metrics pmetric.Metrics) (pmetric.Metrics, error) {
+func (c *MemoryMetricProcessor) processMetrics(_ pmetric.Metrics) (pmetric.Metrics, error) {
 	// setup new calculation mechanism
-	err := c.contracts.PopulateData(metrics)
-	if err != nil {
-		return metrics, err
-	}
 
 	results := c.contracts.Evaluate()
 
@@ -107,9 +103,10 @@ func newMemoryMetricProcessor(
 	set processor.Settings,
 	cfg internal.Config,
 	services domain.Services,
+	dm domain.DatapointManager,
 ) (internal.MetricProcessor, error) {
 	return &MemoryMetricProcessor{
-		contracts: domain.NewContractState(TypeStr, set.Logger, services.GetContractService()),
+		contracts: domain.NewContractState(TypeStr, set.Logger, services, dm),
 		config:    cfg.(*Config),
 		settings:  set,
 		logger:    set.Logger,

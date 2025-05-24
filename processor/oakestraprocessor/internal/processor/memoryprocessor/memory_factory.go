@@ -31,6 +31,7 @@ func (f *Factory) CreateMetricsProcessor(
 	set processor.Settings,
 	cfg internal.Config,
 	services domain.Services,
+	dm domain.DatapointManager,
 ) (internal.MetricProcessor, error) {
-	return newMemoryMetricProcessor(ctx, set, cfg, services)
+	return newMemoryMetricProcessor(ctx, set, cfg, services, dm)
 }

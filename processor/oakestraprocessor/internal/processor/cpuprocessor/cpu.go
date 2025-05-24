@@ -40,13 +40,8 @@ func (c *CPUMetricProcessor) ProcessMetrics(metrics pmetric.Metrics) error {
 	return nil
 }
 
-func (c *CPUMetricProcessor) processMetrics(metrics pmetric.Metrics) (pmetric.Metrics, error) {
+func (c *CPUMetricProcessor) processMetrics(_ pmetric.Metrics) (pmetric.Metrics, error) {
 	// setup new calculation mechanism
-	err := c.contracts.PopulateData(metrics)
-	if err != nil {
-		c.logger.Error("Failed to populate data in cpu processor", zap.Error(err))
-		return metrics, err
-	}
 
 	results := c.contracts.Evaluate()
 
@@ -108,10 +103,11 @@ func newCPUMetricProcessor(
 	set processor.Settings,
 	cfg internal.Config,
 	services domain.Services,
+	dm domain.DatapointManager,
 ) (internal.MetricProcessor, error) {
 
 	return &CPUMetricProcessor{
-		contracts: domain.NewContractState(TypeStr, set.Logger, services.GetContractService()),
+		contracts: domain.NewContractState(TypeStr, set.Logger, services, dm),
 		config:    cfg.(*Config),
 		settings:  set,
 		logger:    set.Logger,

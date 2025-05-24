@@ -35,12 +35,8 @@ func (c *ApplicationMetricProcessor) ProcessMetrics(metrics pmetric.Metrics) err
 	return nil
 }
 
-func (c *ApplicationMetricProcessor) processMetrics(metrics pmetric.Metrics) (pmetric.Metrics, error) {
+func (c *ApplicationMetricProcessor) processMetrics(_ pmetric.Metrics) (pmetric.Metrics, error) {
 	// setup new calculation mechanism
-	err := c.contracts.PopulateData(metrics)
-	if err != nil {
-		return metrics, err
-	}
 
 	results := c.contracts.Evaluate()
 
@@ -86,9 +82,10 @@ func newApplicationMetricProcessor(
 	set processor.Settings,
 	cfg internal.Config,
 	services domain.Services,
+	dm domain.DatapointManager,
 ) (internal.MetricProcessor, error) {
 	return &ApplicationMetricProcessor{
-		contracts:          domain.NewContractState(TypeStr, set.Logger, services.GetContractService()),
+		contracts:          domain.NewContractState(TypeStr, set.Logger, services, dm),
 		formulaToMetricMap: NewFormulaToMetricMap(),
 		config:             cfg.(*Config),
 		logger:             set.Logger,

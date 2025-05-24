@@ -16,7 +16,9 @@ type ProcessorFactory interface {
 		ctx context.Context,
 		settings processor.Settings,
 		cfg Config,
-		services domain.Services) (MetricProcessor, error)
+		services domain.Services,
+		dm domain.DatapointManager,
+	) (MetricProcessor, error)
 }
 
 type MetricProcessor interface {

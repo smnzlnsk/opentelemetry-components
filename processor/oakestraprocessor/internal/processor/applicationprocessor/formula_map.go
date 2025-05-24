@@ -6,27 +6,27 @@ import (
 
 // FormulaToMetricMap is a map of service assigned formula to metric name
 type FormulaToMetricMap struct {
-	mapping map[FormulaKey]domain.MetricMetadata
+	mapping map[FormulaKey]domain.DatapointMetadata
 }
 
 // NewFormulaToMetricMap creates a new FormulaToMetricMap
 func NewFormulaToMetricMap() *FormulaToMetricMap {
 	return &FormulaToMetricMap{
-		mapping: make(map[FormulaKey]domain.MetricMetadata),
+		mapping: make(map[FormulaKey]domain.DatapointMetadata),
 	}
 }
 
-func (ftmp *FormulaToMetricMap) GetMetricName(service string, formula string) domain.MetricMetadata {
+func (ftmp *FormulaToMetricMap) GetMetricName(service string, formula string) domain.DatapointMetadata {
 	key := FormulaKey{Service: service, Formula: formula}
 	if metadata, exists := ftmp.mapping[key]; exists {
 		return metadata
 	}
-	return domain.MetricMetadata{}
+	return domain.DatapointMetadata{}
 }
 
 func (ftmp *FormulaToMetricMap) AddMetric(service string, formula string, metricName string, metricUnit string) {
 	key := FormulaKey{Service: service, Formula: formula}
-	ftmp.mapping[key] = domain.MetricMetadata{
+	ftmp.mapping[key] = domain.DatapointMetadata{
 		MetricName: metricName,
 		MetricUnit: metricUnit,
 	}

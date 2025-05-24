@@ -7,52 +7,39 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.uber.org/zap"
 )
 
 // metricsRepository implements domain.MetricsRepository
 // It handles storing OpenTelemetry metrics in MongoDB
 type metricsRepository struct {
-	collection  *mongo.Collection
-	logger      *zap.Logger
-	transformer domain.MetricsTransformer
+	collection *mongo.Collection
+	logger     *zap.Logger
 }
 
 // NewMetricsRepository creates a new metrics repository
 func NewMetricsRepository(collection *mongo.Collection, logger *zap.Logger) domain.MetricsRepository {
 	return &metricsRepository{
-		collection:  collection,
-		logger:      logger,
-		transformer: domain.NewMetricsTransformer(logger),
+		collection: collection,
+		logger:     logger,
 	}
 }
 
 // SaveMetrics saves OpenTelemetry metrics to MongoDB
 // We assume all metrics in the input are from a single host
-func (r *metricsRepository) SaveMetrics(ctx context.Context, md pmetric.Metrics) error {
-	// Extract the host from metrics using the transformer
-	host := r.transformer.ExtractHost(md)
-
-	// Create the host metrics document using the transformer
-	hostMetrics, err := r.transformer.TransformToDBHostMetrics(md)
-	if err != nil {
-		r.logger.Error("Failed to transform metrics", zap.Error(err))
-		return err
-	}
-
+func (r *metricsRepository) SaveMetrics(ctx context.Context, hostMetrics domain.DBHostMetrics) error {
 	// Create filter for upsert
-	filter := bson.M{"host": host}
+	filter := bson.M{"host": hostMetrics.Host}
 
 	// Create update options with upsert
 	opts := options.Update().SetUpsert(true)
 
 	// First try to find the existing document
 	var existingHost domain.DBHostMetrics
-	err = r.collection.FindOne(ctx, filter).Decode(&existingHost)
+	err := r.collection.FindOne(ctx, filter).Decode(&existingHost)
 
 	if err != nil && err != mongo.ErrNoDocuments {
-		r.logger.Error("Failed to query existing host metrics", zap.Error(err), zap.String("host", host))
+		r.logger.Error("Failed to query existing host metrics", zap.Error(err), zap.String("host", hostMetrics.Host))
 		return err
 	}
 
@@ -60,7 +47,7 @@ func (r *metricsRepository) SaveMetrics(ctx context.Context, md pmetric.Metrics)
 		// Insert new document
 		_, err = r.collection.InsertOne(ctx, hostMetrics)
 		if err != nil {
-			r.logger.Error("Failed to insert host metrics", zap.Error(err), zap.String("host", host))
+			r.logger.Error("Failed to insert host metrics", zap.Error(err), zap.String("host", hostMetrics.Host))
 			return err
 		}
 	} else {
@@ -71,7 +58,7 @@ func (r *metricsRepository) SaveMetrics(ctx context.Context, md pmetric.Metrics)
 		update := bson.M{"$set": merged}
 		_, err = r.collection.UpdateOne(ctx, filter, update, opts)
 		if err != nil {
-			r.logger.Error("Failed to update host metrics", zap.Error(err), zap.String("host", host))
+			r.logger.Error("Failed to update host metrics", zap.Error(err), zap.String("host", hostMetrics.Host))
 			return err
 		}
 	}
@@ -204,12 +191,4 @@ func (r *metricsRepository) GetJobMetrics(ctx context.Context, jobName string) (
 	}
 
 	return result, nil
-}
-
-func (r *metricsRepository) GetJobMetricsAsMap(ctx context.Context, jobName string) (domain.MapHostMetrics, error) {
-	metrics, err := r.GetJobMetrics(ctx, jobName)
-	if err != nil {
-		return domain.MapHostMetrics{}, err
-	}
-	return r.transformer.TransformDBHostMetricsToMap(metrics)
 }

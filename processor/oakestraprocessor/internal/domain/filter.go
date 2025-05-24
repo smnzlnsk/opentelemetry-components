@@ -7,28 +7,29 @@ import (
 )
 
 type MetricFilter interface {
-	MetricFiltersMap() map[string]*metricFilterStruct
+	Length() int
 	AddMetricFilter(string, string) error
 	DeleteMetricFilter(string, string) error
+	GetMetricFilter(string) (*metricFilterStruct, bool)
 }
 
-type filter struct {
+type metricFilter struct {
 	// used to extract a set of metrics for calculations
 	// read: map[metric]MetricFilterStruct
 	MetricFilters map[string]*metricFilterStruct
 }
 
-func NewFilter() *filter {
-	return &filter{
+func NewFilter() MetricFilter {
+	return &metricFilter{
 		MetricFilters: make(map[string]*metricFilterStruct),
 	}
 }
 
-func (f *filter) MetricFiltersMap() map[string]*metricFilterStruct {
-	return f.MetricFilters
+func (f *metricFilter) Length() int {
+	return len(f.MetricFilters)
 }
 
-func (f *filter) AddMetricFilter(key string, state string) error {
+func (f *metricFilter) AddMetricFilter(key string, state string) error {
 	if key == "" {
 		return fmt.Errorf("key is empty")
 	}
@@ -59,7 +60,14 @@ func (f *filter) AddMetricFilter(key string, state string) error {
 	return nil
 }
 
-func (f *filter) DeleteMetricFilter(key string, state string) error {
+func (f *metricFilter) GetMetricFilter(key string) (*metricFilterStruct, bool) {
+	if mf, exists := f.MetricFilters[key]; exists {
+		return mf, true
+	}
+	return nil, false
+}
+
+func (f *metricFilter) DeleteMetricFilter(key string, state string) error {
 	if key == "" {
 		return fmt.Errorf("key is empty")
 	}

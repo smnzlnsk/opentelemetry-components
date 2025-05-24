@@ -117,10 +117,7 @@ func TestMetricFilterStruct(t *testing.T) {
 func TestFilter(t *testing.T) {
 	t.Run("new filter initialization", func(t *testing.T) {
 		f := NewFilter()
-		if f.MetricFilters == nil {
-			t.Error("MetricFilters map was not initialized")
-		}
-		if len(f.MetricFilters) != 0 {
+		if f.Length() != 0 {
 			t.Error("MetricFilters map should be empty on initialization")
 		}
 	})
@@ -137,7 +134,7 @@ func TestFilter(t *testing.T) {
 		}
 
 		// Verify metric was added
-		mf, exists := f.MetricFilters["cpu_usage"]
+		mf, exists := f.GetMetricFilter("cpu_usage")
 		if !exists {
 			t.Fatal("Metric filter was not added")
 		}
@@ -171,7 +168,7 @@ func TestFilter(t *testing.T) {
 				t.Errorf("Failed to delete state: %v", err)
 			}
 
-			mf, exists := f.MetricFilters["cpu_usage"]
+			mf, exists := f.GetMetricFilter("cpu_usage")
 			if !exists {
 				t.Fatal("Metric filter should still exist")
 			}

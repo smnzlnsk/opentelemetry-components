@@ -15,7 +15,8 @@ import (
 
 func TestContractState(t *testing.T) {
 	t.Run("initialization", func(t *testing.T) {
-		cs := NewContractState("test", zap.NewNop(), nil)
+		dm := NewDatapointManager(nil)
+		cs := NewContractState("test", zap.NewNop(), nil, dm)
 
 		if cs.Contracts == nil {
 			t.Error("Contracts map was not initialized")
@@ -30,14 +31,15 @@ func TestContractState(t *testing.T) {
 
 	t.Run("register service", func(t *testing.T) {
 		t.Run("basic registration", func(t *testing.T) {
-			cs := NewContractState("test", zap.NewNop(), nil)
+			dm := NewDatapointManager(nil)
+			cs := NewContractState("test", zap.NewNop(), nil, dm)
 			service := "test-service"
 			contracts := []CalculationContract{
 				{
 					Formula:   "[metric1] + [metric2]",
 					Service:   service,
 					State:     "running",
-					arguments: getCalculationArguments(sanitizeFormula("[metric1] + [metric2]", "running")),
+					Arguments: getCalculationArguments(sanitizeFormula("[metric1] + [metric2]", "running")),
 				},
 			}
 
@@ -59,19 +61,19 @@ func TestContractState(t *testing.T) {
 				"metric2": true,
 			}
 			for metric := range expectedMetrics {
-				_, exists := cs.Filters.MetricFiltersMap()[metric]
+				_, exists := cs.Filters.GetMetricFilter(metric)
 				require.True(t, exists, "Expected metric %s not found in Filters", metric)
 			}
 		})
 
 		t.Run("duplicate service registration", func(t *testing.T) {
-			cs := NewContractState("test", zap.NewNop(), nil)
+			cs := NewContractState("test", zap.NewNop(), nil, nil)
 			service := "test-service"
 			contracts := []CalculationContract{
 				{
 					Formula:   "[metric1]",
 					Service:   service,
-					arguments: getCalculationArguments(sanitizeFormula("[metric1]", "running")),
+					Arguments: getCalculationArguments(sanitizeFormula("[metric1]", "running")),
 				},
 			}
 
@@ -86,7 +88,7 @@ func TestContractState(t *testing.T) {
 	})
 
 	t.Run("default contracts", func(t *testing.T) {
-		cs := NewContractState("test", zap.NewNop(), nil)
+		cs := NewContractState("test", zap.NewNop(), nil, nil)
 		defaultFormula := "[metric3] + [metric4]"
 		service := "test-serviceAAAAAAA"
 
@@ -105,7 +107,7 @@ func TestContractState(t *testing.T) {
 				Formula:   "[metric1] + [metric2]",
 				Service:   service,
 				State:     "running",
-				arguments: getCalculationArguments(sanitizeFormula("[metric1] + [metric2]", "running")),
+				Arguments: getCalculationArguments(sanitizeFormula("[metric1] + [metric2]", "running")),
 			},
 		}
 
@@ -132,20 +134,20 @@ func TestContractState(t *testing.T) {
 		// Verify all metric filters
 		expectedMetrics := []string{"metric1", "metric2", "metric3", "metric4"}
 		for _, metric := range expectedMetrics {
-			_, exists := cs.Filters.MetricFiltersMap()[metric]
+			_, exists := cs.Filters.GetMetricFilter(metric)
 			require.True(t, exists, "Expected metric %s not found in Filters", metric)
 		}
 	})
 
 	t.Run("delete service", func(t *testing.T) {
 		t.Run("cannot delete default service", func(t *testing.T) {
-			cs := NewContractState("test", zap.NewNop(), nil)
+			cs := NewContractState("test", zap.NewNop(), nil, nil)
 			err := cs.DeleteService("default")
 			require.Error(t, err, "Should not be able to delete default service")
 		})
 
 		t.Run("delete service with contracts", func(t *testing.T) {
-			cs := NewContractState("test", zap.NewNop(), nil)
+			cs := NewContractState("test", zap.NewNop(), nil, nil)
 			service := "service1"
 			formula := "[metric1] + [metric2] > 1.0"
 			contracts := []CalculationContract{
@@ -153,7 +155,7 @@ func TestContractState(t *testing.T) {
 					Formula:   formula,
 					Service:   service,
 					State:     "state1",
-					arguments: getCalculationArguments(sanitizeFormula(formula, "running")),
+					Arguments: getCalculationArguments(sanitizeFormula(formula, "running")),
 				},
 			}
 
@@ -163,8 +165,8 @@ func TestContractState(t *testing.T) {
 
 			// Verify initial metric filters
 			for _, contract := range contracts {
-				for _, argument := range contract.arguments {
-					_, exists := cs.Filters.MetricFiltersMap()[argument.Metric]
+				for _, argument := range contract.Arguments {
+					_, exists := cs.Filters.GetMetricFilter(argument.Metric)
 					require.True(t, exists, "Metric %s filter should exist before deletion", argument.Metric)
 				}
 			}
@@ -179,21 +181,21 @@ func TestContractState(t *testing.T) {
 			require.Error(t, err, "Contract should be deleted")
 
 			for _, contract := range contracts {
-				for _, argument := range contract.arguments {
-					_, exists := cs.Filters.MetricFiltersMap()[argument.Metric]
+				for _, argument := range contract.Arguments {
+					_, exists := cs.Filters.GetMetricFilter(argument.Metric)
 					require.False(t, exists, "Metric %s filter should be deleted", argument.Metric)
 				}
 			}
 
 			// Verify datapoints cleanup
 			for _, contract := range contracts {
-				for _, argument := range contract.arguments {
+				for _, argument := range contract.Arguments {
 					dpKey := DatapointKey{
 						Service: service,
 						Metric:  argument.Metric,
 						State:   argument.State,
 					}
-					_, exists := cs.Datapoints[dpKey]
+					_, exists := cs.Datapoints.GetDatapoint(dpKey, 0)
 					require.False(t, exists, "Datapoint should be deleted")
 				}
 			}
@@ -218,7 +220,7 @@ func BenchmarkRegisterService(b *testing.B) {
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				cs := NewContractState("test", zap.NewNop(), nil)
+				cs := NewContractState("test", zap.NewNop(), nil, nil)
 				start := time.Now()
 				_ = cs.RegisterService(bm.service, contracts, "100")
 				b.ReportMetric(float64(time.Since(start).Nanoseconds()), "ns/op")
@@ -240,14 +242,14 @@ func generateTestContracts(service string, count int) []CalculationContract {
 			Formula:   formula,
 			Service:   service,
 			State:     "running",
-			arguments: arguments,
+			Arguments: arguments,
 		}
 	}
 	return contracts
 }
 
 func TestRegisterServiceWithDefaults(t *testing.T) {
-	cs := NewContractState("test", zap.NewNop(), nil)
+	cs := NewContractState("test", zap.NewNop(), nil, nil)
 	service := "test-service"
 
 	// Set up a default contract
@@ -288,13 +290,13 @@ func TestRegisterServiceWithDefaults(t *testing.T) {
 
 func TestDeleteService(t *testing.T) {
 	t.Run("cannot delete default service", func(t *testing.T) {
-		cs := NewContractState("test", zap.NewNop(), nil)
+		cs := NewContractState("test", zap.NewNop(), nil, nil)
 		err := cs.DeleteService("default")
 		require.Error(t, err, "Should not be able to delete default service")
 	})
 
 	t.Run("successful service deletion", func(t *testing.T) {
-		cs := NewContractState("test", zap.NewNop(), nil)
+		cs := NewContractState("test", zap.NewNop(), nil, nil)
 		service := "service1"
 		formula := "[metric1] + [metric2] > 1.0"
 		state := "running"
@@ -305,7 +307,7 @@ func TestDeleteService(t *testing.T) {
 				Formula:   formula,
 				Service:   service,
 				State:     state,
-				arguments: getCalculationArguments(sanitizeFormula(formula, state)),
+				Arguments: getCalculationArguments(sanitizeFormula(formula, state)),
 			},
 		}
 
@@ -321,8 +323,8 @@ func TestDeleteService(t *testing.T) {
 		// Add some datapoints to verify cleanup
 		dpKey1 := DatapointKey{Service: service, Metric: "metric1", State: state}
 		dpKey2 := DatapointKey{Service: service, Metric: "metric2", State: state}
-		cs.Datapoints[dpKey1] = map[int]MetricDatapoint{}
-		cs.Datapoints[dpKey2] = map[int]MetricDatapoint{}
+		cs.Datapoints.GetDatapoints()[dpKey1] = map[int]Datapoint{}
+		cs.Datapoints.GetDatapoints()[dpKey2] = map[int]Datapoint{}
 
 		// Delete service
 		err = cs.DeleteService(service)
@@ -333,20 +335,20 @@ func TestDeleteService(t *testing.T) {
 		require.Error(t, err, "Contract should be deleted")
 
 		// Verify metric filter cleanup
-		_, exists := cs.Filters.MetricFiltersMap()["metric1"]
+		_, exists := cs.Filters.GetMetricFilter("metric1")
 		require.False(t, exists, "metric1 filter should be deleted")
-		_, exists = cs.Filters.MetricFiltersMap()["metric2"]
+		_, exists = cs.Filters.GetMetricFilter("metric2")
 		require.False(t, exists, "metric2 filter should be deleted")
 
 		// Verify datapoints cleanup
-		_, exists = cs.Datapoints[dpKey1]
+		_, exists = cs.Datapoints.GetDatapoints()[dpKey1]
 		require.False(t, exists, "metric1 datapoint should be deleted")
-		_, exists = cs.Datapoints[dpKey2]
+		_, exists = cs.Datapoints.GetDatapoints()[dpKey2]
 		require.False(t, exists, "metric2 datapoint should be deleted")
 	})
 
 	t.Run("delete one service while preserving another with shared metrics", func(t *testing.T) {
-		cs := NewContractState("test", zap.NewNop(), nil)
+		cs := NewContractState("test", zap.NewNop(), nil, nil)
 
 		// Register first service with "running" state
 		service1 := "service1"
@@ -357,7 +359,7 @@ func TestDeleteService(t *testing.T) {
 				Formula:   formula1,
 				Service:   service1,
 				State:     state1,
-				arguments: getCalculationArguments(sanitizeFormula(formula1, state1)),
+				Arguments: getCalculationArguments(sanitizeFormula(formula1, state1)),
 			},
 		}
 		err := cs.RegisterService(service1, contracts1, "100")
@@ -372,7 +374,7 @@ func TestDeleteService(t *testing.T) {
 				Formula:   formula2,
 				Service:   service2,
 				State:     state2,
-				arguments: getCalculationArguments(sanitizeFormula(formula2, state2)),
+				Arguments: getCalculationArguments(sanitizeFormula(formula2, state2)),
 			},
 		}
 		err = cs.RegisterService(service2, contracts2, "100")
@@ -388,25 +390,25 @@ func TestDeleteService(t *testing.T) {
 		require.NoError(t, err, "Service2 contract should exist")
 
 		// Verify initial metric filters
-		mf1, exists := cs.Filters.MetricFiltersMap()["metric1"]
+		mf1, exists := cs.Filters.GetMetricFilter("metric1")
 		require.True(t, exists, "metric1 filter should exist")
 		require.Equal(t, 2, mf1.ActiveContracts(), "metric1 should have two active contracts")
 		require.Equal(t, 1, mf1.StateFilter[state1], "running state should be registered for metric1")
 		require.Equal(t, 1, mf1.StateFilter[state2], "stopped state should be registered for metric1")
 
-		mf2, exists := cs.Filters.MetricFiltersMap()["metric2"]
+		mf2, exists := cs.Filters.GetMetricFilter("metric2")
 		require.True(t, exists, "metric2 filter should exist")
 		require.Equal(t, 1, mf2.ActiveContracts(), "metric2 should have one active contract")
 
-		mf3, exists := cs.Filters.MetricFiltersMap()["metric3"]
+		mf3, exists := cs.Filters.GetMetricFilter("metric3")
 		require.True(t, exists, "metric3 filter should exist")
 		require.Equal(t, 1, mf3.ActiveContracts(), "metric3 should have one active contract")
 
 		// Add datapoints
 		dpKey1 := DatapointKey{Service: service1, Metric: "metric1", State: state1}
 		dpKey2 := DatapointKey{Service: service1, Metric: "metric2", State: state1}
-		cs.Datapoints[dpKey1] = map[int]MetricDatapoint{}
-		cs.Datapoints[dpKey2] = map[int]MetricDatapoint{}
+		cs.Datapoints.GetDatapoints()[dpKey1] = map[int]Datapoint{}
+		cs.Datapoints.GetDatapoints()[dpKey2] = map[int]Datapoint{}
 
 		// Delete service1
 		err = cs.DeleteService(service1)
@@ -421,29 +423,29 @@ func TestDeleteService(t *testing.T) {
 		require.NoError(t, err, "Service2 contract should still exist")
 
 		// Verify metric filter updates
-		mf1, exists = cs.Filters.MetricFiltersMap()["metric1"]
+		mf1, exists = cs.Filters.GetMetricFilter("metric1")
 		require.True(t, exists, "metric1 filter should still exist (needed by service2)")
 		require.Equal(t, 1, mf1.ActiveContracts(), "metric1 should have one active contract")
 		require.Equal(t, 0, mf1.StateFilter[state1], "running state should be removed for metric1")
 		require.Equal(t, 1, mf1.StateFilter[state2], "stopped state should still be registered for metric1")
 
-		_, exists = cs.Filters.MetricFiltersMap()["metric2"]
+		_, exists = cs.Filters.GetMetricFilter("metric2")
 		require.False(t, exists, "metric2 filter should be deleted (only needed by service1)")
 
-		mf3, exists = cs.Filters.MetricFiltersMap()["metric3"]
+		mf3, exists = cs.Filters.GetMetricFilter("metric3")
 		require.True(t, exists, "metric3 filter should still exist (needed by service2)")
 		require.Equal(t, 1, mf3.ActiveContracts(), "metric3 should have one active contract")
 
 		// Verify datapoints cleanup
-		_, exists = cs.Datapoints[dpKey1]
+		_, exists = cs.Datapoints.GetDatapoints()[dpKey1]
 		require.False(t, exists, "service1's metric1 datapoint should be deleted")
-		_, exists = cs.Datapoints[dpKey2]
+		_, exists = cs.Datapoints.GetDatapoints()[dpKey2]
 		require.False(t, exists, "service1's metric2 datapoint should be deleted")
 	})
 }
 
 func TestDefaultContractHandling(t *testing.T) {
-	cs := NewContractState("test", zap.NewNop(), nil)
+	cs := NewContractState("test", zap.NewNop(), nil, nil)
 	defaultFormula := "[metric3] + [metric4]"
 	defaultState := "running"
 	service := "test-service"
@@ -458,8 +460,8 @@ func TestDefaultContractHandling(t *testing.T) {
 	require.Equal(t, "default", defaultContract.Service)
 	require.Equal(t, sanitizeFormula(defaultFormula, defaultState), defaultContract.Formula)
 	require.Equal(t, defaultState, defaultContract.State)
-	require.Contains(t, defaultContract.arguments, CalculationArgument{Metric: "metric3", State: defaultState, Age: 0})
-	require.Contains(t, defaultContract.arguments, CalculationArgument{Metric: "metric4", State: defaultState, Age: 0})
+	require.Contains(t, defaultContract.Arguments, CalculationArgument{Metric: "metric3", State: defaultState, Age: 0})
+	require.Contains(t, defaultContract.Arguments, CalculationArgument{Metric: "metric4", State: defaultState, Age: 0})
 
 	// Register service and verify default contract is copied
 	contracts := []CalculationContract{
@@ -467,7 +469,7 @@ func TestDefaultContractHandling(t *testing.T) {
 			Formula:   "[metric1] + [metric2]",
 			Service:   service,
 			State:     "running",
-			arguments: getCalculationArguments(sanitizeFormula("[metric1] + [metric2]", defaultState)),
+			Arguments: getCalculationArguments(sanitizeFormula("[metric1] + [metric2]", defaultState)),
 		},
 	}
 
@@ -484,7 +486,7 @@ func TestDefaultContractHandling(t *testing.T) {
 	// Verify filters include metrics from both contracts
 	expectedMetrics := []string{"metric1", "metric2", "metric3", "metric4"}
 	for _, metric := range expectedMetrics {
-		filter, exists := cs.Filters.MetricFiltersMap()[metric]
+		filter, exists := cs.Filters.GetMetricFilter(metric)
 		require.True(t, exists, "Metric %s not in filters", metric)
 		require.Greater(t, filter.StateFilter[defaultState], 0, "State '%s' not set for metric %s", defaultState, metric)
 	}
@@ -506,7 +508,7 @@ func TestDefaultContractHandling(t *testing.T) {
 
 func TestServiceRegistration(t *testing.T) {
 	t.Run("register with multiple states", func(t *testing.T) {
-		cs := NewContractState("test", zap.NewNop(), nil)
+		cs := NewContractState("test", zap.NewNop(), nil, nil)
 		service := "test-service"
 		formula := "[metric1] + [metric2]"
 		state := "running"
@@ -516,7 +518,7 @@ func TestServiceRegistration(t *testing.T) {
 				Formula:   formula,
 				Service:   service,
 				State:     state,
-				arguments: getCalculationArguments(sanitizeFormula(formula, state)),
+				Arguments: getCalculationArguments(sanitizeFormula(formula, state)),
 			},
 		}
 
@@ -531,15 +533,15 @@ func TestServiceRegistration(t *testing.T) {
 		require.Equal(t, state, contract.State)
 
 		// Verify filters
-		for _, argument := range contract.arguments {
-			filter, exists := cs.Filters.MetricFiltersMap()[argument.Metric]
+		for _, argument := range contract.Arguments {
+			filter, exists := cs.Filters.GetMetricFilter(argument.Metric)
 			require.True(t, exists)
 			require.Greater(t, filter.StateFilter[state], 0)
 		}
 	})
 
 	t.Run("register with overlapping metrics", func(t *testing.T) {
-		cs := NewContractState("test", zap.NewNop(), nil)
+		cs := NewContractState("test", zap.NewNop(), nil, nil)
 		service := "test-service"
 		formula1 := "[metric1] + [metric2]"
 		formula2 := "[metric2] + [metric3]"
@@ -549,13 +551,13 @@ func TestServiceRegistration(t *testing.T) {
 				Formula:   formula1,
 				Service:   service,
 				State:     state,
-				arguments: getCalculationArguments(sanitizeFormula(formula1, state)),
+				Arguments: getCalculationArguments(sanitizeFormula(formula1, state)),
 			},
 			{
 				Formula:   formula2,
 				Service:   service,
 				State:     state,
-				arguments: getCalculationArguments(sanitizeFormula(formula2, state)),
+				Arguments: getCalculationArguments(sanitizeFormula(formula2, state)),
 			},
 		}
 
@@ -563,7 +565,7 @@ func TestServiceRegistration(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify metric filters
-		filter, exists := cs.Filters.MetricFiltersMap()["metric2"]
+		filter, exists := cs.Filters.GetMetricFilter("metric2")
 		require.True(t, exists)
 		require.Equal(t, 2, filter.ActiveContracts(), "Metric2 should be used by two contracts")
 	})
@@ -571,7 +573,7 @@ func TestServiceRegistration(t *testing.T) {
 
 func TestContractState_Comprehensive(t *testing.T) {
 	t.Run("default contract handling", func(t *testing.T) {
-		cs := NewContractState("test", zap.NewNop(), nil)
+		cs := NewContractState("test", zap.NewNop(), nil, nil)
 
 		t.Run("empty default contract", func(t *testing.T) {
 			err := cs.GenerateDefaultContract("", []string{})
@@ -593,8 +595,8 @@ func TestContractState_Comprehensive(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, "default", contract.Service)
 			require.Equal(t, sanitizeFormula(formula, "running"), contract.Formula)
-			require.Contains(t, contract.arguments, CalculationArgument{Metric: "metric1", State: "running", Age: 0})
-			require.Contains(t, contract.arguments, CalculationArgument{Metric: "metric2", State: "running", Age: 0})
+			require.Contains(t, contract.Arguments, CalculationArgument{Metric: "metric1", State: "running", Age: 0})
+			require.Contains(t, contract.Arguments, CalculationArgument{Metric: "metric2", State: "running", Age: 0})
 		})
 
 		t.Run("duplicate default contract", func(t *testing.T) {
@@ -613,7 +615,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 	})
 
 	t.Run("service registration edge cases", func(t *testing.T) {
-		cs := NewContractState("test", zap.NewNop(), nil)
+		cs := NewContractState("test", zap.NewNop(), nil, nil)
 
 		t.Run("register empty service name", func(t *testing.T) {
 			contracts := []CalculationContract{
@@ -646,7 +648,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 	})
 
 	t.Run("metric filter handling", func(t *testing.T) {
-		cs := NewContractState("test", zap.NewNop(), nil)
+		cs := NewContractState("test", zap.NewNop(), nil, nil)
 
 		t.Run("overlapping states", func(t *testing.T) {
 			// Register first contract
@@ -669,14 +671,14 @@ func TestContractState_Comprehensive(t *testing.T) {
 			}, "100")
 			require.NoError(t, err)
 
-			filter, exists := cs.Filters.MetricFiltersMap()["metric1"]
+			filter, exists := cs.Filters.GetMetricFilter("metric1")
 			require.True(t, exists)
 			require.Equal(t, 2, filter.ActiveContracts())
 			require.Greater(t, filter.StateFilter["running"], 0)
 		})
 
 		t.Run("metric cleanup", func(t *testing.T) {
-			cs := NewContractState("test", zap.NewNop(), nil)
+			cs := NewContractState("test", zap.NewNop(), nil, nil)
 
 			// Register service with multiple metrics
 			err := cs.RegisterService("service1", []CalculationContract{
@@ -684,7 +686,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 					Formula:   "[metric1] + [metric2]",
 					Service:   "service1",
 					State:     "running",
-					arguments: getCalculationArguments(sanitizeFormula("[metric1] + [metric2]", "running")),
+					Arguments: getCalculationArguments(sanitizeFormula("[metric1] + [metric2]", "running")),
 				},
 			}, "100")
 			require.NoError(t, err)
@@ -694,15 +696,15 @@ func TestContractState_Comprehensive(t *testing.T) {
 			require.NoError(t, err)
 
 			// Verify all metrics are cleaned up
-			_, exists := cs.Filters.MetricFiltersMap()["metric1"]
+			_, exists := cs.Filters.GetMetricFilter("metric1")
 			require.False(t, exists, "metric1 should be removed")
-			_, exists = cs.Filters.MetricFiltersMap()["metric2"]
+			_, exists = cs.Filters.GetMetricFilter("metric2")
 			require.False(t, exists, "metric2 should be removed")
 		})
 	})
 
 	t.Run("datapoint handling", func(t *testing.T) {
-		cs := NewContractState("test", zap.NewNop(), nil)
+		cs := NewContractState("test", zap.NewNop(), nil, nil)
 
 		t.Run("datapoint cleanup", func(t *testing.T) {
 			// Register service
@@ -712,7 +714,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 					Formula:   "[metric1]",
 					Service:   service,
 					State:     "running",
-					arguments: getCalculationArguments(sanitizeFormula("[metric1]", "running")),
+					Arguments: getCalculationArguments(sanitizeFormula("[metric1]", "running")),
 				},
 			}, "100")
 			require.NoError(t, err)
@@ -723,20 +725,20 @@ func TestContractState_Comprehensive(t *testing.T) {
 				Metric:  "metric1",
 				State:   "running",
 			}
-			cs.Datapoints[dpKey] = map[int]MetricDatapoint{}
+			cs.Datapoints.GetDatapoints()[dpKey] = map[int]Datapoint{}
 
 			// Delete service
 			err = cs.DeleteService(service)
 			require.NoError(t, err)
 
 			// Verify datapoint cleanup
-			_, exists := cs.Datapoints[dpKey]
+			_, exists := cs.Datapoints.GetDatapoints()[dpKey]
 			require.False(t, exists, "Datapoint should be removed")
 		})
 	})
 
 	t.Run("concurrent operations", func(t *testing.T) {
-		cs := NewContractState("test", zap.NewNop(), nil)
+		cs := NewContractState("test", zap.NewNop(), nil, nil)
 
 		// Add default contract
 		err := cs.GenerateDefaultContract("[metric1]", []string{"running"})
@@ -755,7 +757,7 @@ func TestContractState_Comprehensive(t *testing.T) {
 						Formula:   "[metric2]",
 						Service:   svc,
 						State:     "running",
-						arguments: getCalculationArguments(sanitizeFormula("[metric2]", "running")),
+						Arguments: getCalculationArguments(sanitizeFormula("[metric2]", "running")),
 					},
 				}
 				err := cs.RegisterService(svc, contracts, "100")
@@ -934,7 +936,7 @@ func TestFormulaParsingWithStates(t *testing.T) {
 }
 
 func TestContractState_FullWorkflow(t *testing.T) {
-	cs := NewContractState("test", zap.NewNop(), nil)
+	cs := NewContractState("test", zap.NewNop(), nil, nil)
 	cs.GenerateDefaultContract("[container.metric1(0){in}] + [container.metric1{out}] + [container.metric2]", []string{"in", "out"})
 	cs.RegisterService("full.service.name.instance.0", []CalculationContract{}, "100")
 
@@ -975,7 +977,8 @@ func TestContractState_FullWorkflow(t *testing.T) {
 			dp.SetDoubleValue(value)
 		}
 	}
-	cs.PopulateData(metrics)
+	cs.Datapoints.SaveMetrics(metrics)
 
-	_ = cs.Evaluate()
+	result := cs.Evaluate()
+	fmt.Println("Result", result)
 }
