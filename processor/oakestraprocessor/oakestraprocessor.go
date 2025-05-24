@@ -171,6 +171,11 @@ func (p *MultiProcessor) ConsumeMetrics(ctx context.Context, metrics pmetric.Met
 		}
 	}
 
+	err = p.datapointManager.SaveCalculationResults(metrics)
+	if err != nil {
+		p.logger.Error("failed to save calculation results to datapoint manager", zap.Error(err))
+	}
+
 	return p.next.ConsumeMetrics(ctx, metrics)
 }
 

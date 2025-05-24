@@ -18,6 +18,7 @@ type DatapointManager interface {
 	DeleteDatapointForService(service string) error
 	GetDatapoints() map[DatapointKey]map[int]Datapoint
 	GetCurrentIndex(key DatapointKey) int
+	SaveCalculationResults(metrics pmetric.Metrics) error
 }
 
 // datapointManager is a simple implementation of the DatapointManager interface
@@ -69,7 +70,97 @@ func (d *datapointManager) GetDatapoint(key DatapointKey, age int) (Datapoint, b
 	return Datapoint{}, false
 }
 
-// SaveMetrics saves the metrics to memory and simulatenously collects information to save to the database
+// SaveCalculationResults saves the calculation results to the database
+func (d *datapointManager) SaveCalculationResults(metrics pmetric.Metrics) error {
+	host := d.GetHost(metrics)
+
+	dbMetrics := DBHostMetrics{
+		Host:                   host,
+		SystemMetrics:          []DBMetricDatapoints{},
+		ServiceInstanceMetrics: []DBServiceInstanceMetrics{},
+	}
+
+	// Services map to track service metrics - use map for grouping
+	serviceMap := make(map[string]*DBServiceInstanceMetrics)
+
+	// Process all resource metrics
+	for i := 0; i < metrics.ResourceMetrics().Len(); i++ {
+		rm := metrics.ResourceMetrics().At(i)
+
+		// Extract service name from resource attributes
+		serviceName := ""
+		if svcAttr, ok := rm.Resource().Attributes().Get("container_id"); ok {
+			serviceName = svcAttr.Str()
+		}
+
+		jobName, instanceNumber := splitServiceName(serviceName)
+
+		// Process all scope metrics for this resource
+		for j := 0; j < rm.ScopeMetrics().Len(); j++ {
+			sm := rm.ScopeMetrics().At(j)
+
+			// Check if the scope metric is coming from the oakestraprocessor
+			if !strings.Contains(sm.Scope().Name(), "oakestraprocessor/internal/processor") {
+				continue
+			}
+
+			// Process all metrics in this scope
+			for k := 0; k < sm.Metrics().Len(); k++ {
+				metric := sm.Metrics().At(k)
+
+				// Extract datapoints
+				datapoints := d.extractDatapointsFromMetric(metric)
+				if datapoints == nil {
+					continue
+				}
+
+				// Determine if this is a container metric
+				if IsContainerMetric(metric.Name()) {
+					for _, dp := range datapoints {
+						// Group metrics by service instance
+						if serviceMap[serviceName] == nil {
+							serviceMap[serviceName] = &DBServiceInstanceMetrics{
+								JobName:        jobName,
+								InstanceNumber: instanceNumber,
+								Metrics:        []DBMetricDatapoints{},
+							}
+						}
+
+						// Add the metric datapoint to the service instance
+						serviceMap[serviceName].Metrics = append(serviceMap[serviceName].Metrics, DBMetricDatapoints{
+							Identifier: MetricKey{
+								Name:  metric.Name(),
+								State: dp.state,
+								Type:  MetricValueTypeRaw,
+							},
+							Datapoints: []DBMetricDatapoint{
+								{
+									Value:     dp.value,
+									Timestamp: time.Now(),
+								},
+							},
+						})
+					}
+				}
+			}
+		}
+	}
+
+	// Convert the service map to a slice for BSON compatibility
+	for _, serviceMetrics := range serviceMap {
+		dbMetrics.ServiceInstanceMetrics = append(dbMetrics.ServiceInstanceMetrics, *serviceMetrics)
+	}
+
+	// Save metrics to database
+	err := d.metricsService.SaveMetrics(context.Background(), dbMetrics)
+	if err != nil {
+		return fmt.Errorf("failed to save metrics to database: %w", err)
+	}
+
+	return nil
+}
+
+// SaveMetrics saves the incoming metrics to memory and simulatenously collects information to save to the database
 func (d *datapointManager) SaveMetrics(metrics pmetric.Metrics) error {
 	// Get the host
 	host := d.GetHost(metrics)
@@ -117,9 +208,6 @@ func (d *datapointManager) SaveMetrics(metrics pmetric.Metrics) error {
 
 				// Determine if this is a container metric
 				if IsContainerMetric(metric.Name()) {
-					// Create a unique key for this service instance
-					serviceKey := fmt.Sprintf("%s:%d", jobName, instanceNumber)
-
 					for _, dp := range datapoints {
 						key := DatapointKey{
 							Service: serviceName,
@@ -136,8 +224,8 @@ func (d *datapointManager) SaveMetrics(metrics pmetric.Metrics) error {
 						d.indexTracker[key] = (id + 1) % 5
 
 						// Group metrics by service instance
-						if serviceMap[serviceKey] == nil {
-							serviceMap[serviceKey] = &DBServiceInstanceMetrics{
+						if serviceMap[serviceName] == nil {
+							serviceMap[serviceName] = &DBServiceInstanceMetrics{
 								JobName:        jobName,
 								InstanceNumber: instanceNumber,
 								Metrics:        []DBMetricDatapoints{},
@@ -145,7 +233,7 @@ func (d *datapointManager) SaveMetrics(metrics pmetric.Metrics) error {
 						}
 
 						// Add the metric datapoint to the service instance
-						serviceMap[serviceKey].Metrics = append(serviceMap[serviceKey].Metrics, DBMetricDatapoints{
+						serviceMap[serviceName].Metrics = append(serviceMap[serviceName].Metrics, DBMetricDatapoints{
 							Identifier: MetricKey{
 								Name:  metric.Name(),
 								State: dp.state,
