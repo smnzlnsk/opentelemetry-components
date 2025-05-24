@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/database"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/heuristicentity"
 	internalhttp "github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/http"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/notification_interface"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/persistence/mongodb"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/policy"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/repository"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/service"
@@ -26,7 +26,7 @@ type heuristicEngineProcessor struct {
 	logger       *zap.Logger
 
 	// database client
-	mongodbClient *mongodb.Client
+	mongodbClient *database.MongoDBClient
 	repositories  *repository.Repositories
 
 	// services
@@ -71,7 +71,7 @@ func (p *heuristicEngineProcessor) Capabilities() consumer.Capabilities {
 
 func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) error {
 	// initialize mongodb client
-	dbClient, err := mongodb.NewClient(&p.config.MongoDB, p.logger)
+	dbClient, err := database.NewMongoDBClient(&p.config.MongoDB, p.logger)
 	if err != nil {
 		return err
 	}
@@ -125,20 +125,16 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 		Build()
 
 	// Verify that the routing heuristic engine exists
-	engine, exists := p.activeEntities[domain.RoutingEntity]
+	entity, exists := p.activeEntities[domain.RoutingEntity]
 	if !exists {
-		return fmt.Errorf("heuristic engine %v not found for policy %s", domain.RoutingEntity, "routing")
+		return fmt.Errorf("heuristic entity %v not found for policy %s", domain.RoutingEntity, "routing")
 	}
 
 	p.policies["routing"] = policyBuilder.
 		WithName("routing").
-		WithPreEvaluationCondition("true").
-		WithEvaluationCondition("true").
-		WithHeuristicEngine(engine).
-		WithAlert(alertNotifier).
-		WithAlertCondition("true").
-		WithRoute(routingNotifier).
-		WithRouteCondition("true").
+		WithHeuristicEntity(entity).
+		WithAlertInterface(alertNotifier).
+		WithRouteInterface(routingNotifier).
 		Build()
 
 	// setup http server if enabled

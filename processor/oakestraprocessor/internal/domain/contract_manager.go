@@ -3,28 +3,31 @@ package domain
 import (
 	"fmt"
 	"sync"
+
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/calculation"
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/contract"
 )
 
 type ContractManager interface {
-	AddContract(contract CalculationContract) error
-	GetContract(key ContractKey) (CalculationContract, error)
-	DeleteContract(contract CalculationContract) error
+	AddContract(contract calculation.Contract) error
+	GetContract(key contract.Key) (calculation.Contract, error)
+	DeleteContract(contract calculation.Contract) error
 	Length() int
-	GetAllContracts() map[ContractKey]CalculationContract
-	GetDefaultContracts() map[string]CalculationContract
-	GetServiceContracts() map[ContractKey]CalculationContract
+	GetAllContracts() map[contract.Key]calculation.Contract
+	GetDefaultContracts() map[string]calculation.Contract
+	GetServiceContracts() map[contract.Key]calculation.Contract
 	IsServiceRegistered(service string) bool
 }
 
 type contractManager struct {
 	rwMutex   sync.RWMutex
-	contracts map[ContractKey]CalculationContract
+	contracts map[contract.Key]calculation.Contract
 }
 
 func NewContractManager() ContractManager {
 	return &contractManager{
 		rwMutex:   sync.RWMutex{},
-		contracts: make(map[ContractKey]CalculationContract),
+		contracts: make(map[contract.Key]calculation.Contract),
 	}
 }
 
@@ -34,29 +37,29 @@ func (c *contractManager) Length() int {
 	return len(c.contracts)
 }
 
-func (c *contractManager) AddContract(contract CalculationContract) error {
+func (c *contractManager) AddContract(ct calculation.Contract) error {
 	c.rwMutex.Lock()
 	defer c.rwMutex.Unlock()
-	key := ContractKey{
-		Service: contract.Service,
-		Formula: contract.Formula,
+	key := contract.Key{
+		Service: ct.Service,
+		Formula: ct.Formula,
 	}
-	c.contracts[key] = contract
+	c.contracts[key] = ct
 	return nil
 }
 
-func (c *contractManager) GetContract(key ContractKey) (CalculationContract, error) {
+func (c *contractManager) GetContract(key contract.Key) (calculation.Contract, error) {
 	c.rwMutex.RLock()
 	defer c.rwMutex.RUnlock()
 
 	contract, ok := c.contracts[key]
 	if !ok {
-		return CalculationContract{}, fmt.Errorf("contract not found")
+		return calculation.Contract{}, fmt.Errorf("contract not found")
 	}
 	return contract, nil
 }
 
-func (c *contractManager) GetAllContracts() map[ContractKey]CalculationContract {
+func (c *contractManager) GetAllContracts() map[contract.Key]calculation.Contract {
 	c.rwMutex.RLock()
 	defer c.rwMutex.RUnlock()
 	return c.contracts
@@ -64,10 +67,10 @@ func (c *contractManager) GetAllContracts() map[ContractKey]CalculationContract 
 
 // GetDefaultContracts returns all contracts for the default service
 // The map key is the formula
-func (c *contractManager) GetDefaultContracts() map[string]CalculationContract {
+func (c *contractManager) GetDefaultContracts() map[string]calculation.Contract {
 	c.rwMutex.RLock()
 	defer c.rwMutex.RUnlock()
-	res := make(map[string]CalculationContract)
+	res := make(map[string]calculation.Contract)
 	for key, contract := range c.contracts {
 		if key.Service == "default" {
 			res[key.Formula] = contract
@@ -76,10 +79,10 @@ func (c *contractManager) GetDefaultContracts() map[string]CalculationContract {
 	return res
 }
 
-func (c *contractManager) GetServiceContracts() map[ContractKey]CalculationContract {
+func (c *contractManager) GetServiceContracts() map[contract.Key]calculation.Contract {
 	c.rwMutex.RLock()
 	defer c.rwMutex.RUnlock()
-	res := make(map[ContractKey]CalculationContract)
+	res := make(map[contract.Key]calculation.Contract)
 	for key, contract := range c.contracts {
 		if key.Service != "default" {
 			res[key] = contract
@@ -98,12 +101,12 @@ func (c *contractManager) IsServiceRegistered(service string) bool {
 	return false
 }
 
-func (c *contractManager) DeleteContract(contract CalculationContract) error {
+func (c *contractManager) DeleteContract(ct calculation.Contract) error {
 	c.rwMutex.Lock()
 	defer c.rwMutex.Unlock()
-	key := ContractKey{
-		Service: contract.Service,
-		Formula: contract.Formula,
+	key := contract.Key{
+		Service: ct.Service,
+		Formula: ct.Formula,
 	}
 	delete(c.contracts, key)
 	return nil

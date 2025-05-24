@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/job"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"go.uber.org/zap"
 )
@@ -108,7 +109,7 @@ func (s *Server) setupRoutes() {
 func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 	// Parse appName from request body
 
-	var requestBody domain.JobRequest
+	var requestBody job.Request
 
 	if r.Body != nil {
 		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -147,7 +148,7 @@ func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get the processor from the policy
-	processors := policy.HeuristicEngine().Processors()
+	processors := policy.HeuristicEntity().Processors()
 
 	var processorsToEnforce []string
 

@@ -3,6 +3,8 @@ package domain
 import (
 	"testing"
 
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/calculation"
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/contract"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,13 +19,13 @@ func TestContractManager(t *testing.T) {
 	t.Run("add and get contract", func(t *testing.T) {
 		tests := []struct {
 			name           string
-			contract       CalculationContract
+			contract       calculation.Contract
 			expectedLength int
 			shouldError    bool
 		}{
 			{
 				name: "add valid contract",
-				contract: CalculationContract{
+				contract: calculation.Contract{
 					Service: "test-service",
 					Formula: "test-formula",
 				},
@@ -32,7 +34,7 @@ func TestContractManager(t *testing.T) {
 			},
 			{
 				name: "add duplicate contract",
-				contract: CalculationContract{
+				contract: calculation.Contract{
 					Service: "test-service",
 					Formula: "test-formula",
 				},
@@ -51,7 +53,7 @@ func TestContractManager(t *testing.T) {
 				assert.Equal(t, tt.expectedLength, cm.Length())
 
 				// Get contract
-				key := ContractKey{
+				key := contract.Key{
 					Service: tt.contract.Service,
 					Formula: tt.contract.Formula,
 				}
@@ -63,7 +65,7 @@ func TestContractManager(t *testing.T) {
 
 		t.Run("get non-existent contract", func(t *testing.T) {
 			cm := NewContractManager()
-			key := ContractKey{
+			key := contract.Key{
 				Service: "non-existent",
 				Formula: "non-existent",
 			}
@@ -75,12 +77,12 @@ func TestContractManager(t *testing.T) {
 	t.Run("delete contract", func(t *testing.T) {
 		tests := []struct {
 			name           string
-			contract       CalculationContract
+			contract       calculation.Contract
 			expectedLength int
 		}{
 			{
 				name: "delete existing contract",
-				contract: CalculationContract{
+				contract: calculation.Contract{
 					Service: "test-service",
 					Formula: "test-formula",
 				},
@@ -88,7 +90,7 @@ func TestContractManager(t *testing.T) {
 			},
 			{
 				name: "delete non-existent contract",
-				contract: CalculationContract{
+				contract: calculation.Contract{
 					Service: "non-existent",
 					Formula: "non-existent",
 				},
@@ -101,7 +103,7 @@ func TestContractManager(t *testing.T) {
 				cm := NewContractManager()
 
 				// Add initial contract
-				initialContract := CalculationContract{
+				initialContract := calculation.Contract{
 					Service: "test-service",
 					Formula: "test-formula",
 				}
@@ -114,7 +116,7 @@ func TestContractManager(t *testing.T) {
 				assert.Equal(t, tt.expectedLength, cm.Length())
 
 				// Verify contract is deleted
-				key := ContractKey{
+				key := contract.Key{
 					Service: tt.contract.Service,
 					Formula: tt.contract.Formula,
 				}
@@ -127,12 +129,12 @@ func TestContractManager(t *testing.T) {
 	t.Run("get all contracts", func(t *testing.T) {
 		tests := []struct {
 			name          string
-			contracts     []CalculationContract
+			contracts     []calculation.Contract
 			expectedCount int
 		}{
 			{
 				name: "multiple contracts",
-				contracts: []CalculationContract{
+				contracts: []calculation.Contract{
 					{Service: "service1", Formula: "formula1"},
 					{Service: "service2", Formula: "formula2"},
 				},
@@ -140,7 +142,7 @@ func TestContractManager(t *testing.T) {
 			},
 			{
 				name:          "no contracts",
-				contracts:     []CalculationContract{},
+				contracts:     []calculation.Contract{},
 				expectedCount: 0,
 			},
 		}
@@ -160,12 +162,12 @@ func TestContractManager(t *testing.T) {
 				assert.Equal(t, tt.expectedCount, len(contracts))
 
 				// Verify contracts
-				for _, contract := range tt.contracts {
-					key := ContractKey{
-						Service: contract.Service,
-						Formula: contract.Formula,
+				for _, c := range tt.contracts {
+					key := contract.Key{
+						Service: c.Service,
+						Formula: c.Formula,
 					}
-					assert.Equal(t, contract, contracts[key])
+					assert.Equal(t, c, contracts[key])
 				}
 			})
 		}
@@ -174,12 +176,12 @@ func TestContractManager(t *testing.T) {
 	t.Run("get default contracts", func(t *testing.T) {
 		tests := []struct {
 			name          string
-			contracts     []CalculationContract
+			contracts     []calculation.Contract
 			expectedCount int
 		}{
 			{
 				name: "multiple default contracts",
-				contracts: []CalculationContract{
+				contracts: []calculation.Contract{
 					{Service: "default", Formula: "formula1"},
 					{Service: "default", Formula: "formula2"},
 					{Service: "other-service", Formula: "formula3"},
@@ -188,7 +190,7 @@ func TestContractManager(t *testing.T) {
 			},
 			{
 				name: "no default contracts",
-				contracts: []CalculationContract{
+				contracts: []calculation.Contract{
 					{Service: "service1", Formula: "formula1"},
 					{Service: "service2", Formula: "formula2"},
 				},
@@ -223,13 +225,13 @@ func TestContractManager(t *testing.T) {
 	t.Run("service registration", func(t *testing.T) {
 		tests := []struct {
 			name           string
-			contract       CalculationContract
+			contract       calculation.Contract
 			serviceToCheck string
 			expectedResult bool
 		}{
 			{
 				name: "check registered service",
-				contract: CalculationContract{
+				contract: calculation.Contract{
 					Service: "test-service",
 					Formula: "test-formula",
 				},
@@ -238,7 +240,7 @@ func TestContractManager(t *testing.T) {
 			},
 			{
 				name: "check non-registered service",
-				contract: CalculationContract{
+				contract: calculation.Contract{
 					Service: "test-service",
 					Formula: "test-formula",
 				},

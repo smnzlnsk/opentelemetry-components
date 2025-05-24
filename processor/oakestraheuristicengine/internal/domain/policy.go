@@ -2,28 +2,16 @@ package domain
 
 type PolicyBuilder interface {
 	WithName(name string) PolicyBuilder
-	WithHeuristicEngine(engine HeuristicEntity) PolicyBuilder
-	WithPreEvaluationCondition(condition string) PolicyBuilder
-	WithEvaluationCondition(condition string) PolicyBuilder
-	WithAlertCondition(condition string) PolicyBuilder
-	WithRouteCondition(condition string) PolicyBuilder
-	WithScheduleCondition(condition string) PolicyBuilder
-	WithRoute(measure NotificationInterface[any]) PolicyBuilder
-	WithAlert(measure NotificationInterface[any]) PolicyBuilder
-	WithSchedule(measure NotificationInterface[any]) PolicyBuilder
+	WithRouteInterface(measure NotificationInterface[any]) PolicyBuilder
+	WithAlertInterface(measure NotificationInterface[any]) PolicyBuilder
+	WithScheduleInterface(measure NotificationInterface[any]) PolicyBuilder
 	WithHeuristicEntity(entity HeuristicEntity) PolicyBuilder
 	NotificationInterfaceBuilder() NotificationInterfaceBuilder[any]
 	Build() Policy
 }
 
 type Policy interface {
-	Check(values map[string]interface{}) error
 	Enforce(processorIdentifier string, arguments ...interface{}) error
-	CheckPreEvaluationCondition(values map[string]interface{}) error
-	CheckEvaluationCondition(values map[string]interface{}) error
-	CheckNotificationConditions(evaluationResult EvaluationResult) error
-	Capabilities() []NotificationInterfaceCapability
 	Name() string
-	HeuristicEngine() HeuristicEntity
-	NotificationInterface(capability NotificationInterfaceCapability) NotificationInterface[any]
+	HeuristicEntity() HeuristicEntity
 }

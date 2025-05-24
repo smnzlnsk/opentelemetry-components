@@ -1,25 +1,25 @@
-package mongodb
+package database
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/config"
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/config"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
 
 // Client represents a MongoDB client with connection to a specific database
-type Client struct {
+type MongoDBClient struct {
 	client   *mongo.Client
 	database *mongo.Database
 	logger   *zap.Logger
 }
 
 // NewClient creates a new MongoDB client
-func NewClient(cfg *config.MongoDBConfig, logger *zap.Logger) (*Client, error) {
+func NewMongoDBClient(cfg *config.MongoDBConfig, logger *zap.Logger) (*MongoDBClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -53,7 +53,7 @@ func NewClient(cfg *config.MongoDBConfig, logger *zap.Logger) (*Client, error) {
 		zap.Int("port", cfg.Port),
 		zap.String("database", database.Name()))
 
-	return &Client{
+	return &MongoDBClient{
 		client:   client,
 		database: database,
 		logger:   logger,
@@ -61,12 +61,12 @@ func NewClient(cfg *config.MongoDBConfig, logger *zap.Logger) (*Client, error) {
 }
 
 // GetDatabase returns the MongoDB database
-func (c *Client) GetDatabase() *mongo.Database {
+func (c *MongoDBClient) GetDatabase() *mongo.Database {
 	return c.database
 }
 
 // Close closes the MongoDB connection
-func (c *Client) Close(ctx context.Context) error {
+func (c *MongoDBClient) Close(ctx context.Context) error {
 	c.logger.Info("Closing MongoDB connection")
 	return c.client.Disconnect(ctx)
 }

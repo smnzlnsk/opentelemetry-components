@@ -1,7 +1,6 @@
 package policy
 
 import (
-	"github.com/Knetic/govaluate"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/notification_interface"
 )
@@ -9,11 +8,6 @@ import (
 // policyBuilder implements interfaces.PolicyBuilder
 type policyBuilder struct {
 	name                         string
-	preEvaluationConditions      []*govaluate.EvaluableExpression
-	evaluationConditions         []*govaluate.EvaluableExpression
-	alertConditions              []*govaluate.EvaluableExpression
-	routeConditions              []*govaluate.EvaluableExpression
-	scheduleConditions           []*govaluate.EvaluableExpression
 	notificationInterfaceBuilder domain.NotificationInterfaceBuilder[any]
 	capabilities                 []domain.NotificationInterfaceCapability
 	notificationInterfaces       map[domain.NotificationInterfaceCapability]domain.NotificationInterface[any]
@@ -42,25 +36,7 @@ func (b *policyBuilder) WithHeuristicEngine(engine domain.HeuristicEntity) domai
 	return b
 }
 
-func (b *policyBuilder) WithPreEvaluationCondition(conditions string) domain.PolicyBuilder {
-	expression, err := govaluate.NewEvaluableExpression(conditions)
-	if err != nil {
-		return b
-	}
-	b.preEvaluationConditions = append(b.preEvaluationConditions, expression)
-	return b
-}
-
-func (b *policyBuilder) WithEvaluationCondition(condition string) domain.PolicyBuilder {
-	expression, err := govaluate.NewEvaluableExpression(condition)
-	if err != nil {
-		return b
-	}
-	b.evaluationConditions = append(b.evaluationConditions, expression)
-	return b
-}
-
-func (b *policyBuilder) WithRoute(measure domain.NotificationInterface[any]) domain.PolicyBuilder {
+func (b *policyBuilder) WithRouteInterface(measure domain.NotificationInterface[any]) domain.PolicyBuilder {
 	if b.notificationInterfaces[domain.NotificationInterfaceCapability_Route] != nil {
 		return b
 	}
@@ -72,16 +48,7 @@ func (b *policyBuilder) WithRoute(measure domain.NotificationInterface[any]) dom
 	return b
 }
 
-func (b *policyBuilder) WithRouteCondition(condition string) domain.PolicyBuilder {
-	expression, err := govaluate.NewEvaluableExpression(condition)
-	if err != nil {
-		return b
-	}
-	b.routeConditions = append(b.routeConditions, expression)
-	return b
-}
-
-func (b *policyBuilder) WithAlert(measure domain.NotificationInterface[any]) domain.PolicyBuilder {
+func (b *policyBuilder) WithAlertInterface(measure domain.NotificationInterface[any]) domain.PolicyBuilder {
 	if b.notificationInterfaces[domain.NotificationInterfaceCapability_Alert] != nil {
 		return b
 	}
@@ -93,16 +60,7 @@ func (b *policyBuilder) WithAlert(measure domain.NotificationInterface[any]) dom
 	return b
 }
 
-func (b *policyBuilder) WithAlertCondition(condition string) domain.PolicyBuilder {
-	expression, err := govaluate.NewEvaluableExpression(condition)
-	if err != nil {
-		return b
-	}
-	b.alertConditions = append(b.alertConditions, expression)
-	return b
-}
-
-func (b *policyBuilder) WithSchedule(measure domain.NotificationInterface[any]) domain.PolicyBuilder {
+func (b *policyBuilder) WithScheduleInterface(measure domain.NotificationInterface[any]) domain.PolicyBuilder {
 	if b.notificationInterfaces[domain.NotificationInterfaceCapability_Schedule] != nil {
 		return b
 	}
@@ -111,15 +69,6 @@ func (b *policyBuilder) WithSchedule(measure domain.NotificationInterface[any]) 
 	}
 	b.capabilities = append(b.capabilities, domain.NotificationInterfaceCapability_Schedule)
 	b.notificationInterfaces[domain.NotificationInterfaceCapability_Schedule] = measure
-	return b
-}
-
-func (b *policyBuilder) WithScheduleCondition(condition string) domain.PolicyBuilder {
-	expression, err := govaluate.NewEvaluableExpression(condition)
-	if err != nil {
-		return b
-	}
-	b.scheduleConditions = append(b.scheduleConditions, expression)
 	return b
 }
 
@@ -145,43 +94,21 @@ func (b *policyBuilder) Build() domain.Policy {
 		return nil
 	}
 
-	if len(b.preEvaluationConditions) == 0 {
-		return nil
-	}
-
-	if len(b.evaluationConditions) == 0 {
-		return nil
-	}
-
-	// Verify, if a notification interface is set, then at least one condition has to be present
-	if _, ok := b.notificationInterfaces[domain.NotificationInterfaceCapability_Alert]; ok {
-		if len(b.alertConditions) == 0 {
-			return nil
-		}
-	}
-
-	if _, ok := b.notificationInterfaces[domain.NotificationInterfaceCapability_Route]; ok {
-		if len(b.routeConditions) == 0 {
-			return nil
-		}
-	}
-
-	if _, ok := b.notificationInterfaces[domain.NotificationInterfaceCapability_Schedule]; ok {
-		if len(b.scheduleConditions) == 0 {
-			return nil
+	// Set the notification interfaces on the heuristic entity
+	for _, capability := range b.capabilities {
+		switch capability {
+		case domain.NotificationInterfaceCapability_Alert:
+			b.heuristicEntity.SetAlert(b.notificationInterfaces[capability])
+		case domain.NotificationInterfaceCapability_Route:
+			b.heuristicEntity.SetRoute(b.notificationInterfaces[capability])
+		case domain.NotificationInterfaceCapability_Schedule:
+			b.heuristicEntity.SetSchedule(b.notificationInterfaces[capability])
 		}
 	}
 
 	policy := &policy{
-		name:                    b.name,
-		heuristicEntity:         b.heuristicEntity,
-		capabilities:            b.capabilities,
-		notificationInterfaces:  b.notificationInterfaces,
-		preEvaluationConditions: b.preEvaluationConditions,
-		evaluationConditions:    b.evaluationConditions,
-		alertConditions:         b.alertConditions,
-		routeConditions:         b.routeConditions,
-		scheduleConditions:      b.scheduleConditions,
+		name:            b.name,
+		heuristicEntity: b.heuristicEntity,
 	}
 
 	// Reset internal state
@@ -189,11 +116,6 @@ func (b *policyBuilder) Build() domain.Policy {
 	b.capabilities = nil
 	b.notificationInterfaces = make(map[domain.NotificationInterfaceCapability]domain.NotificationInterface[any])
 	b.heuristicEntity = nil
-	b.preEvaluationConditions = nil
-	b.evaluationConditions = nil
-	b.alertConditions = nil
-	b.routeConditions = nil
-	b.scheduleConditions = nil
 
 	return policy
 }

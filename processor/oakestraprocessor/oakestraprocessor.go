@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	pb "github.com/smnzlnsk/monitoring-proto-lib/gen/go/monitoring_proto_lib/monitoring/v1"
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/database"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/domain"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/persistence/mongodb"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/repository"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/service"
 	"go.opentelemetry.io/collector/component"
@@ -25,14 +25,14 @@ type MultiProcessor struct {
 	logger           *zap.Logger
 	cancel           context.CancelFunc
 	grpcServer       Server
-	mongodbClient    *mongodb.Client
+	mongodbClient    *database.MongoDBClient
 	config           *Config
 	services         domain.Services
 	datapointManager domain.DatapointManager
 }
 
 func newMultiProcessor(ctx context.Context, set processor.Settings, cfg *Config, next consumer.Metrics) *MultiProcessor {
-	dbClient, err := mongodb.NewClient(&cfg.MongoDB, set.Logger)
+	dbClient, err := database.NewMongoDBClient(&cfg.MongoDB, set.Logger)
 	if err != nil {
 		set.Logger.Error(err.Error())
 		return nil

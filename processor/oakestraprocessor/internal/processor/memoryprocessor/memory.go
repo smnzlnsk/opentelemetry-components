@@ -6,6 +6,7 @@ import (
 	"time"
 
 	pb "github.com/smnzlnsk/monitoring-proto-lib/gen/go/monitoring_proto_lib/monitoring/v1"
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/calculation"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/memoryprocessor/internal/metadata"
@@ -105,8 +106,12 @@ func newMemoryMetricProcessor(
 	services domain.Services,
 	dm domain.DatapointManager,
 ) (internal.MetricProcessor, error) {
+	contracts, err := domain.NewContractState(TypeStr, set.Logger, services, dm)
+	if err != nil {
+		return nil, err
+	}
 	return &MemoryMetricProcessor{
-		contracts: domain.NewContractState(TypeStr, set.Logger, services, dm),
+		contracts: contracts,
 		config:    cfg.(*Config),
 		settings:  set,
 		logger:    set.Logger,
@@ -116,13 +121,13 @@ func newMemoryMetricProcessor(
 
 func (c *MemoryMetricProcessor) RegisterService(serviceName string, instanceNumber int32, resource *pb.ResourceInfo, _ []*pb.CalculationRequest) error {
 	// register default services in internal contract state
-	err := c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), []domain.CalculationContract{}, resource.Memory)
+	err := c.contracts.RegisterService(fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber), []calculation.Contract{}, resource.Memory)
 	if err != nil {
 		return err
 	}
 
 	defContracts := c.contracts.GetDefaultContracts()
-	contractsArray := make([]domain.CalculationContract, 0, len(defContracts))
+	contractsArray := make([]calculation.Contract, 0, len(defContracts))
 	// Change service name from default to serviceName
 	for _, contract := range defContracts {
 		contract.Service = fmt.Sprintf("%s.instance.%d", serviceName, instanceNumber)

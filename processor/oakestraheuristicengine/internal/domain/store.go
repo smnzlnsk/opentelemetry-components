@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/metric"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 )
 
@@ -11,10 +12,10 @@ type ProcessorStore interface {
 }
 
 type MetricStore interface {
-	Store(key MetricKey, value float64)
+	Store(key metric.Key, value float64)
 	Save(md pmetric.Metrics) error
-	GetValueForMetricKey(key MetricKey) float64
-	GetValueMapByMetricKey() map[MetricKey]float64
+	GetValueForMetricKey(key metric.Key) float64
+	GetValueMapByMetricKey() map[metric.Key]float64
 	GetValueMapByString() map[string]interface{}
 }
 

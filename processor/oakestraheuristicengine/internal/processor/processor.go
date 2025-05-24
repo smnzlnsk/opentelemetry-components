@@ -1,16 +1,26 @@
 package processor
 
 import (
+	"github.com/Knetic/govaluate"
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/evaluation"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
 // processor implements interfaces.Processor
 type processor struct {
-	identifier string
-	evaluator  domain.Evaluator
+	identifier    string
+	evaluator     domain.Evaluator
+	resultHistory map[string]evaluation.Result
+
+	// Notification conditions are set on a per processor basis
+	notificationConditions map[domain.NotificationInterfaceCapability]*govaluate.EvaluableExpression
 }
 
-func NewProcessor(identifier string, evaluator domain.Evaluator) domain.Processor {
+func NewProcessor(
+	identifier string,
+	evaluator domain.Evaluator,
+	notificationConditions map[domain.NotificationInterfaceCapability]*govaluate.EvaluableExpression,
+) domain.Processor {
 	return &processor{
 		identifier: identifier,
 		evaluator:  evaluator,
@@ -25,14 +35,18 @@ func (p *processor) Evaluator() domain.Evaluator {
 	return p.evaluator
 }
 
-func (p *processor) Process(instanceNumber int, prev float64, params map[string]interface{}) (domain.EvaluationEntry, error) {
+func (p *processor) Process(instanceNumber int, prev float64, params map[string]interface{}) (evaluation.Entry, error) {
 	priority, err := p.evaluator.Evaluate(prev, params)
 	if err != nil {
-		return domain.EvaluationEntry{}, err
+		return evaluation.Entry{}, err
 	}
 
-	return domain.EvaluationEntry{
+	return evaluation.Entry{
 		InstanceNumber: instanceNumber,
 		Priority:       priority,
 	}, nil
+}
+
+func (p *processor) GetNotificationCondition(capability domain.NotificationInterfaceCapability) *govaluate.EvaluableExpression {
+	return p.notificationConditions[capability]
 }

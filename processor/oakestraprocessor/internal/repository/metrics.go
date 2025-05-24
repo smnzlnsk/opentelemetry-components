@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/database"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/domain"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -27,7 +28,7 @@ func NewMetricsRepository(collection *mongo.Collection, logger *zap.Logger) doma
 
 // SaveMetrics saves OpenTelemetry metrics to MongoDB
 // We assume all metrics in the input are from a single host
-func (r *metricsRepository) SaveMetrics(ctx context.Context, hostMetrics domain.DBHostMetrics) error {
+func (r *metricsRepository) SaveMetrics(ctx context.Context, hostMetrics database.HostMetrics) error {
 	// Create filter for upsert
 	filter := bson.M{"host": hostMetrics.Host}
 
@@ -35,7 +36,7 @@ func (r *metricsRepository) SaveMetrics(ctx context.Context, hostMetrics domain.
 	opts := options.Update().SetUpsert(true)
 
 	// First try to find the existing document
-	var existingHost domain.DBHostMetrics
+	var existingHost database.HostMetrics
 	err := r.collection.FindOne(ctx, filter).Decode(&existingHost)
 
 	if err != nil && err != mongo.ErrNoDocuments {
@@ -67,11 +68,11 @@ func (r *metricsRepository) SaveMetrics(ctx context.Context, hostMetrics domain.
 }
 
 // mergeHostMetrics merges new metrics into existing host metrics
-func (r *metricsRepository) mergeHostMetrics(existing, new domain.DBHostMetrics) domain.DBHostMetrics {
+func (r *metricsRepository) mergeHostMetrics(existing, new database.HostMetrics) database.HostMetrics {
 	result := existing
 
 	// Helper function to add new datapoints to existing metrics
-	mergeMetricDatapoints := func(existing []domain.DBMetricDatapoints, new []domain.DBMetricDatapoints) []domain.DBMetricDatapoints {
+	mergeMetricDatapoints := func(existing []database.MetricDatapoints, new []database.MetricDatapoints) []database.MetricDatapoints {
 		// Create a map for quick lookup by identifier
 		metricMap := make(map[string]int)
 
@@ -136,7 +137,7 @@ func (r *metricsRepository) mergeHostMetrics(existing, new domain.DBHostMetrics)
 }
 
 // GetJobMetrics gets the metrics for a job
-func (r *metricsRepository) GetJobMetrics(ctx context.Context, jobName string) (domain.DBHostMetrics, error) {
+func (r *metricsRepository) GetJobMetrics(ctx context.Context, jobName string) (database.HostMetrics, error) {
 	// Create a filter to find hosts that have service instances with the specified job name
 	filter := bson.M{"service_instance_metrics.job_name": jobName}
 
@@ -144,20 +145,20 @@ func (r *metricsRepository) GetJobMetrics(ctx context.Context, jobName string) (
 	cursor, err := r.collection.Find(ctx, filter)
 	if err != nil {
 		r.logger.Error("Failed to find metrics from MongoDB", zap.Error(err), zap.String("job_name", jobName))
-		return domain.DBHostMetrics{}, err
+		return database.HostMetrics{}, err
 	}
 	defer cursor.Close(ctx)
 
 	// Combine all results into a single DBHostMetrics
-	result := domain.DBHostMetrics{
+	result := database.HostMetrics{
 		Host:                   "",
-		SystemMetrics:          []domain.DBMetricDatapoints{},
-		ServiceInstanceMetrics: []domain.DBServiceInstanceMetrics{},
+		SystemMetrics:          []database.MetricDatapoints{},
+		ServiceInstanceMetrics: []database.ServiceInstanceMetrics{},
 	}
 
 	// Process all hosts that match the filter
 	for cursor.Next(ctx) {
-		var hostMetrics domain.DBHostMetrics
+		var hostMetrics database.HostMetrics
 		if err := cursor.Decode(&hostMetrics); err != nil {
 			r.logger.Error("Failed to decode host metrics", zap.Error(err), zap.String("job_name", jobName))
 			continue
@@ -181,13 +182,13 @@ func (r *metricsRepository) GetJobMetrics(ctx context.Context, jobName string) (
 
 	if err := cursor.Err(); err != nil {
 		r.logger.Error("Cursor error while getting job metrics", zap.Error(err), zap.String("job_name", jobName))
-		return domain.DBHostMetrics{}, err
+		return database.HostMetrics{}, err
 	}
 
 	// If no data was found
 	if result.Host == "" {
 		r.logger.Warn("No metrics found for job", zap.String("job_name", jobName))
-		return domain.DBHostMetrics{}, mongo.ErrNoDocuments
+		return database.HostMetrics{}, mongo.ErrNoDocuments
 	}
 
 	return result, nil

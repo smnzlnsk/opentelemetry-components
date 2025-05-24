@@ -3,8 +3,9 @@ package repository
 import (
 	"context"
 
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/database"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/middleware"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/transformers"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
@@ -23,12 +24,12 @@ func NewMetricsRepository(collection *mongo.Collection, logger *zap.Logger) doma
 	return &metricsRepository{
 		collection:  collection,
 		logger:      logger,
-		transformer: middleware.NewMetricsTransformer(logger),
+		transformer: transformers.NewMetricsTransformer(logger),
 	}
 }
 
 // GetJobMetrics gets the metrics for a job
-func (r *metricsRepository) GetJobMetrics(ctx context.Context, jobName string) (domain.DBHostMetrics, error) {
+func (r *metricsRepository) GetJobMetrics(ctx context.Context, jobName string) (database.HostMetrics, error) {
 	// Create a filter to find hosts that have service instances with the specified job name
 	filter := bson.M{"service_instance_metrics.job_name": jobName}
 
@@ -36,20 +37,20 @@ func (r *metricsRepository) GetJobMetrics(ctx context.Context, jobName string) (
 	cursor, err := r.collection.Find(ctx, filter)
 	if err != nil {
 		r.logger.Error("Failed to find metrics from MongoDB", zap.Error(err), zap.String("job_name", jobName))
-		return domain.DBHostMetrics{}, err
+		return database.HostMetrics{}, err
 	}
 	defer cursor.Close(ctx)
 
 	// Combine all results into a single DBHostMetrics
-	result := domain.DBHostMetrics{
+	result := database.HostMetrics{
 		Host:                   "",
-		SystemMetrics:          []domain.DBMetricDatapoint{},
-		ServiceInstanceMetrics: []domain.DBServiceInstanceMetrics{},
+		SystemMetrics:          []database.MetricDatapoints{},
+		ServiceInstanceMetrics: []database.ServiceInstanceMetrics{},
 	}
 
 	// Process all hosts that match the filter
 	for cursor.Next(ctx) {
-		var hostMetrics domain.DBHostMetrics
+		var hostMetrics database.HostMetrics
 		if err := cursor.Decode(&hostMetrics); err != nil {
 			r.logger.Error("Failed to decode host metrics", zap.Error(err), zap.String("job_name", jobName))
 			continue
@@ -73,22 +74,22 @@ func (r *metricsRepository) GetJobMetrics(ctx context.Context, jobName string) (
 
 	if err := cursor.Err(); err != nil {
 		r.logger.Error("Cursor error while getting job metrics", zap.Error(err), zap.String("job_name", jobName))
-		return domain.DBHostMetrics{}, err
+		return database.HostMetrics{}, err
 	}
 
 	// If no data was found
 	if result.Host == "" {
 		r.logger.Warn("No metrics found for job", zap.String("job_name", jobName))
-		return domain.DBHostMetrics{}, mongo.ErrNoDocuments
+		return database.HostMetrics{}, mongo.ErrNoDocuments
 	}
 
 	return result, nil
 }
 
-func (r *metricsRepository) GetJobMetricsAsMap(ctx context.Context, jobName string) (domain.MapHostMetrics, error) {
+func (r *metricsRepository) GetJobMetricsAsMap(ctx context.Context, jobName string) (database.MapHostMetrics, error) {
 	metrics, err := r.GetJobMetrics(ctx, jobName)
 	if err != nil {
-		return domain.MapHostMetrics{}, err
+		return database.MapHostMetrics{}, err
 	}
 	return r.transformer.TransformDBHostMetricsToMap(metrics)
 }

@@ -3,7 +3,7 @@ package oakestraheuristicengine
 import (
 	"context"
 
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/config"
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/config"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/metadata"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"

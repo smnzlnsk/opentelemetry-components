@@ -3,6 +3,8 @@ package processor
 import (
 	"testing"
 
+	"github.com/Knetic/govaluate"
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/evaluation"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
@@ -90,9 +92,13 @@ func (m *mockProcessor) Evaluator() domain.Evaluator {
 	return nil
 }
 
-func (m *mockProcessor) Process(instanceNumber int, prev float64, params map[string]interface{}) (domain.EvaluationEntry, error) {
-	return domain.EvaluationEntry{
+func (m *mockProcessor) Process(instanceNumber int, prev float64, params map[string]interface{}) (evaluation.Entry, error) {
+	return evaluation.Entry{
 		InstanceNumber: instanceNumber,
 		Priority:       prev,
 	}, nil
+}
+
+func (m *mockProcessor) GetNotificationCondition(capability domain.NotificationInterfaceCapability) *govaluate.EvaluableExpression {
+	return nil
 }

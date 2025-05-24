@@ -84,8 +84,12 @@ func newApplicationMetricProcessor(
 	services domain.Services,
 	dm domain.DatapointManager,
 ) (internal.MetricProcessor, error) {
+	contracts, err := domain.NewContractState(TypeStr, set.Logger, services, dm)
+	if err != nil {
+		return nil, err
+	}
 	return &ApplicationMetricProcessor{
-		contracts:          domain.NewContractState(TypeStr, set.Logger, services, dm),
+		contracts:          contracts,
 		formulaToMetricMap: NewFormulaToMetricMap(),
 		config:             cfg.(*Config),
 		logger:             set.Logger,

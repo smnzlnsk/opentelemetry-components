@@ -1,6 +1,7 @@
-package domain
+package database
 
-import "time"
+// This is the defintion as it is stored in the database
+// The entries are managed by the cluster service manager
 
 type Job struct {
 	JobName             string                     `json:"job_name"`
@@ -17,13 +18,4 @@ type ServiceIPListEntry struct {
 	IpType     string `json:"IpType"`
 	Address    string `json:"Address"`
 	Address_v6 string `json:"Address_v6"`
-}
-
-// TODO: remove redundancy between appName and job_name in JobData
-type JobRequest struct {
-	AppName   string    `json:"appName"`
-	ServiceIP string    `json:"serviceIp,omitempty"`
-	IpType    string    `json:"IpType,omitempty"`
-	Timestamp time.Time `json:"timestamp"`
-	JobData   Job       `json:"jobData"`
 }

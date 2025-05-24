@@ -7,32 +7,35 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/database"
+	metric "github.com/smnzlnsk/opentelemetry-components/internal/shared/metric"
+	datapoint "github.com/smnzlnsk/opentelemetry-components/internal/shared/metric/datapoint"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 )
 
 type DatapointManager interface {
 	GetHost(metrics pmetric.Metrics) string
-	GetDatapoint(key DatapointKey, age int) (Datapoint, bool)
+	GetDatapoint(key datapoint.Key, age int) (datapoint.Datapoint, bool)
 	SaveMetrics(metrics pmetric.Metrics) error
 	DeleteDatapointForService(service string) error
-	GetDatapoints() map[DatapointKey]map[int]Datapoint
-	GetCurrentIndex(key DatapointKey) int
+	GetDatapoints() map[datapoint.Key]map[int]datapoint.Datapoint
+	GetCurrentIndex(key datapoint.Key) int
 	SaveCalculationResults(metrics pmetric.Metrics) error
 }
 
 // datapointManager is a simple implementation of the DatapointManager interface
 // It stores datapoints in memory
 type datapointManager struct {
-	Datapoints     map[DatapointKey]map[int]Datapoint
-	indexTracker   map[DatapointKey]int
+	Datapoints     map[datapoint.Key]map[int]datapoint.Datapoint
+	indexTracker   map[datapoint.Key]int
 	metricsService MetricsService
 }
 
 func NewDatapointManager(metricsService MetricsService) DatapointManager {
 	return &datapointManager{
-		Datapoints:     make(map[DatapointKey]map[int]Datapoint),
-		indexTracker:   make(map[DatapointKey]int),
+		Datapoints:     make(map[datapoint.Key]map[int]datapoint.Datapoint),
+		indexTracker:   make(map[datapoint.Key]int),
 		metricsService: metricsService,
 	}
 }
@@ -51,15 +54,15 @@ func (d *datapointManager) String() string {
 	return str
 }
 
-func (d *datapointManager) GetDatapoints() map[DatapointKey]map[int]Datapoint {
+func (d *datapointManager) GetDatapoints() map[datapoint.Key]map[int]datapoint.Datapoint {
 	return d.Datapoints
 }
 
-func (d *datapointManager) GetCurrentIndex(key DatapointKey) int {
+func (d *datapointManager) GetCurrentIndex(key datapoint.Key) int {
 	return d.indexTracker[key]
 }
 
-func (d *datapointManager) GetDatapoint(key DatapointKey, age int) (Datapoint, bool) {
+func (d *datapointManager) GetDatapoint(key datapoint.Key, age int) (datapoint.Datapoint, bool) {
 	if dps, exists := d.Datapoints[key]; exists {
 		currentIdx := d.indexTracker[key]
 		lookupIdx := (currentIdx - 1 - age + 5) % 5
@@ -67,21 +70,21 @@ func (d *datapointManager) GetDatapoint(key DatapointKey, age int) (Datapoint, b
 			return dp, true
 		}
 	}
-	return Datapoint{}, false
+	return datapoint.Datapoint{}, false
 }
 
 // SaveCalculationResults saves the calculation results to the database
 func (d *datapointManager) SaveCalculationResults(metrics pmetric.Metrics) error {
 	host := d.GetHost(metrics)
 
-	dbMetrics := DBHostMetrics{
+	dbMetrics := database.HostMetrics{
 		Host:                   host,
-		SystemMetrics:          []DBMetricDatapoints{},
-		ServiceInstanceMetrics: []DBServiceInstanceMetrics{},
+		SystemMetrics:          []database.MetricDatapoints{},
+		ServiceInstanceMetrics: []database.ServiceInstanceMetrics{},
 	}
 
 	// Services map to track service metrics - use map for grouping
-	serviceMap := make(map[string]*DBServiceInstanceMetrics)
+	serviceMap := make(map[string]*database.ServiceInstanceMetrics)
 
 	// Process all resource metrics
 	for i := 0; i < metrics.ResourceMetrics().Len(); i++ {
@@ -106,34 +109,34 @@ func (d *datapointManager) SaveCalculationResults(metrics pmetric.Metrics) error
 
 			// Process all metrics in this scope
 			for k := 0; k < sm.Metrics().Len(); k++ {
-				metric := sm.Metrics().At(k)
+				m := sm.Metrics().At(k)
 
 				// Extract datapoints
-				datapoints := d.extractDatapointsFromMetric(metric)
+				datapoints := d.extractDatapointsFromMetric(m)
 				if datapoints == nil {
 					continue
 				}
 
 				// Determine if this is a container metric
-				if IsContainerMetric(metric.Name()) {
+				if IsContainerMetric(m.Name()) {
 					for _, dp := range datapoints {
 						// Group metrics by service instance
 						if serviceMap[serviceName] == nil {
-							serviceMap[serviceName] = &DBServiceInstanceMetrics{
+							serviceMap[serviceName] = &database.ServiceInstanceMetrics{
 								JobName:        jobName,
 								InstanceNumber: instanceNumber,
-								Metrics:        []DBMetricDatapoints{},
+								Metrics:        []database.MetricDatapoints{},
 							}
 						}
 
 						// Add the metric datapoint to the service instance
-						serviceMap[serviceName].Metrics = append(serviceMap[serviceName].Metrics, DBMetricDatapoints{
-							Identifier: MetricKey{
-								Name:  metric.Name(),
+						serviceMap[serviceName].Metrics = append(serviceMap[serviceName].Metrics, database.MetricDatapoints{
+							Identifier: metric.Key{
+								Name:  m.Name(),
 								State: dp.state,
-								Type:  MetricValueTypeRaw,
+								Type:  metric.MetricValueTypeRaw,
 							},
-							Datapoints: []DBMetricDatapoint{
+							Datapoints: []database.MetricDatapoint{
 								{
 									Value:     dp.value,
 									Timestamp: time.Now(),
@@ -165,14 +168,14 @@ func (d *datapointManager) SaveMetrics(metrics pmetric.Metrics) error {
 	// Get the host
 	host := d.GetHost(metrics)
 
-	dbMetrics := DBHostMetrics{
+	dbMetrics := database.HostMetrics{
 		Host:                   host,
-		SystemMetrics:          []DBMetricDatapoints{},
-		ServiceInstanceMetrics: []DBServiceInstanceMetrics{},
+		SystemMetrics:          []database.MetricDatapoints{},
+		ServiceInstanceMetrics: []database.ServiceInstanceMetrics{},
 	}
 
 	// Services map to track service metrics - use map for grouping
-	serviceMap := make(map[string]*DBServiceInstanceMetrics)
+	serviceMap := make(map[string]*database.ServiceInstanceMetrics)
 
 	// Process all resource metrics
 	for i := 0; i < metrics.ResourceMetrics().Len(); i++ {
@@ -192,8 +195,8 @@ func (d *datapointManager) SaveMetrics(metrics pmetric.Metrics) error {
 
 			// Process all metrics in this scope
 			for k := 0; k < sm.Metrics().Len(); k++ {
-				metric := sm.Metrics().At(k)
-				metricType := metric.Type()
+				m := sm.Metrics().At(k)
+				metricType := m.Type()
 
 				// Skip non-gauge and non-sum metrics
 				if metricType != pmetric.MetricTypeGauge && metricType != pmetric.MetricTypeSum {
@@ -201,45 +204,45 @@ func (d *datapointManager) SaveMetrics(metrics pmetric.Metrics) error {
 				}
 
 				// Extract datapoints
-				datapoints := d.extractDatapointsFromMetric(metric)
+				datapoints := d.extractDatapointsFromMetric(m)
 				if datapoints == nil {
 					continue
 				}
 
 				// Determine if this is a container metric
-				if IsContainerMetric(metric.Name()) {
+				if IsContainerMetric(m.Name()) {
 					for _, dp := range datapoints {
-						key := DatapointKey{
+						key := datapoint.Key{
 							Service: serviceName,
-							Metric:  metric.Name(),
+							Metric:  m.Name(),
 							State:   dp.state,
 						}
 						id := d.indexTracker[key]
 						if d.Datapoints[key] == nil {
-							d.Datapoints[key] = make(map[int]Datapoint)
+							d.Datapoints[key] = make(map[int]datapoint.Datapoint)
 						}
-						d.Datapoints[key][id] = Datapoint{
+						d.Datapoints[key][id] = datapoint.Datapoint{
 							Value: dp.value,
 						}
 						d.indexTracker[key] = (id + 1) % 5
 
 						// Group metrics by service instance
 						if serviceMap[serviceName] == nil {
-							serviceMap[serviceName] = &DBServiceInstanceMetrics{
+							serviceMap[serviceName] = &database.ServiceInstanceMetrics{
 								JobName:        jobName,
 								InstanceNumber: instanceNumber,
-								Metrics:        []DBMetricDatapoints{},
+								Metrics:        []database.MetricDatapoints{},
 							}
 						}
 
 						// Add the metric datapoint to the service instance
-						serviceMap[serviceName].Metrics = append(serviceMap[serviceName].Metrics, DBMetricDatapoints{
-							Identifier: MetricKey{
-								Name:  metric.Name(),
+						serviceMap[serviceName].Metrics = append(serviceMap[serviceName].Metrics, database.MetricDatapoints{
+							Identifier: metric.Key{
+								Name:  m.Name(),
 								State: dp.state,
-								Type:  MetricValueTypeRaw,
+								Type:  metric.MetricValueTypeRaw,
 							},
-							Datapoints: []DBMetricDatapoint{
+							Datapoints: []database.MetricDatapoint{
 								{
 									Value:     dp.value,
 									Timestamp: time.Now(),
@@ -249,28 +252,28 @@ func (d *datapointManager) SaveMetrics(metrics pmetric.Metrics) error {
 					}
 				} else {
 					for _, dp := range datapoints {
-						key := DatapointKey{
+						key := datapoint.Key{
 							Service: "",
-							Metric:  metric.Name(),
+							Metric:  m.Name(),
 							State:   dp.state,
 						}
 
 						id := d.indexTracker[key]
 						if d.Datapoints[key] == nil {
-							d.Datapoints[key] = make(map[int]Datapoint)
+							d.Datapoints[key] = make(map[int]datapoint.Datapoint)
 						}
-						d.Datapoints[key][id] = Datapoint{
+						d.Datapoints[key][id] = datapoint.Datapoint{
 							Value: dp.value,
 						}
 						d.indexTracker[key] = (id + 1) % 5
 
-						dbMetrics.SystemMetrics = append(dbMetrics.SystemMetrics, DBMetricDatapoints{
-							Identifier: MetricKey{
-								Name:  metric.Name(),
+						dbMetrics.SystemMetrics = append(dbMetrics.SystemMetrics, database.MetricDatapoints{
+							Identifier: metric.Key{
+								Name:  m.Name(),
 								State: dp.state,
-								Type:  MetricValueTypeRaw,
+								Type:  metric.MetricValueTypeRaw,
 							},
-							Datapoints: []DBMetricDatapoint{
+							Datapoints: []database.MetricDatapoint{
 								{
 									Value:     dp.value,
 									Timestamp: time.Now(),

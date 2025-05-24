@@ -1,12 +1,10 @@
-package middleware
+package transformers
 
 import (
 	"strconv"
-	"strings"
-	"time"
 
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/database"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.uber.org/zap"
 )
@@ -55,13 +53,13 @@ func (t *metricsTransformer) ExtractHost(md pmetric.Metrics) string {
 }
 
 // TransformDBHostMetricsToMap transforms DBHostMetrics to a MapHostMetrics
-func (t *metricsTransformer) TransformDBHostMetricsToMap(dbHostMetrics domain.DBHostMetrics) (domain.MapHostMetrics, error) {
-	hostMetrics := make(domain.MapHostMetrics)
+func (t *metricsTransformer) TransformDBHostMetricsToMap(dbHostMetrics database.HostMetrics) (database.MapHostMetrics, error) {
+	hostMetrics := make(database.MapHostMetrics)
 
 	// Initialize the host entry with empty maps
-	hostMetrics[dbHostMetrics.Host] = domain.MetricsStruct{
+	hostMetrics[dbHostMetrics.Host] = database.MetricsStruct{
 		HostMetrics:            make(map[string]float64),
-		ServiceInstanceMetrics: make(map[string]domain.ServiceInstanceMetricsMap),
+		ServiceInstanceMetrics: make(map[string]database.ServiceInstanceMetricsMap),
 	}
 
 	// Process system metrics
@@ -80,7 +78,7 @@ func (t *metricsTransformer) TransformDBHostMetricsToMap(dbHostMetrics domain.DB
 
 		// Initialize the service metrics map if it doesn't exist
 		if _, exists := hostMetrics[dbHostMetrics.Host].ServiceInstanceMetrics[serviceID]; !exists {
-			hostMetrics[dbHostMetrics.Host].ServiceInstanceMetrics[serviceID] = make(domain.ServiceInstanceMetricsMap)
+			hostMetrics[dbHostMetrics.Host].ServiceInstanceMetrics[serviceID] = make(database.ServiceInstanceMetricsMap)
 		}
 
 		// Add each metric datapoint
@@ -97,11 +95,11 @@ func (t *metricsTransformer) TransformDBHostMetricsToMap(dbHostMetrics domain.DB
 }
 
 // mergeHostMetrics merges new metrics into existing host metrics
-func (t *metricsTransformer) MergeHostMetrics(existing, new domain.DBHostMetrics) domain.DBHostMetrics {
+func (t *metricsTransformer) MergeHostMetrics(existing, new database.HostMetrics) database.HostMetrics {
 	result := existing
 
 	// Helper function to add new datapoints to existing metrics
-	mergeMetricDatapoints := func(existing []domain.DBMetricDatapoint, new []domain.DBMetricDatapoint) []domain.DBMetricDatapoint {
+	mergeMetricDatapoints := func(existing []database.MetricDatapoints, new []database.MetricDatapoints) []database.MetricDatapoints {
 		// Create a map for quick lookup by identifier
 		metricMap := make(map[string]int)
 
@@ -159,97 +157,4 @@ func (t *metricsTransformer) MergeHostMetrics(existing, new domain.DBHostMetrics
 	}
 
 	return result
-}
-
-// ExtractDatapoint extracts a single datapoint from a metric
-func (t *metricsTransformer) extractDatapoint(metric pmetric.Metric) *domain.DBMetricDatapoint {
-	name := metric.Name()
-	now := time.Now()
-
-	// Create a slice to hold datapoints for this metric
-	var datapoints []domain.MetricDatapoint
-
-	switch metric.Type() {
-	case pmetric.MetricTypeGauge:
-		// For simplicity just use the first datapoint
-		if metric.Gauge().DataPoints().Len() > 0 {
-			dp := metric.Gauge().DataPoints().At(0)
-			value := getValueFromDataPoint(dp)
-			state := getStateAttribute(dp.Attributes())
-
-			datapoints = append(datapoints, domain.MetricDatapoint{
-				Value:     value,
-				Timestamp: now,
-			})
-
-			return &domain.DBMetricDatapoint{
-				Identifier: domain.MetricKey{
-					Name:  name,
-					State: state,
-					Type:  domain.MetricValueTypeRaw,
-				},
-				Datapoints: datapoints,
-			}
-		}
-
-	case pmetric.MetricTypeSum:
-		// For simplicity just use the first datapoint
-		if metric.Sum().DataPoints().Len() > 0 {
-			dp := metric.Sum().DataPoints().At(0)
-			value := getValueFromDataPoint(dp)
-			state := getStateAttribute(dp.Attributes())
-
-			datapoints = append(datapoints, domain.MetricDatapoint{
-				Value:     value,
-				Timestamp: now,
-			})
-
-			return &domain.DBMetricDatapoint{
-				Identifier: domain.MetricKey{
-					Name:  name,
-					State: state,
-					Type:  domain.MetricValueTypeRaw,
-				},
-				Datapoints: datapoints,
-			}
-		}
-	}
-
-	return nil
-}
-
-// Helper functions
-func getStateAttribute(attrs pcommon.Map) string {
-	if state, ok := attrs.Get("state"); ok {
-		return state.Str()
-	}
-	return "default"
-}
-
-func getValueFromDataPoint(dp pmetric.NumberDataPoint) float64 {
-	switch dp.ValueType() {
-	case pmetric.NumberDataPointValueTypeDouble:
-		return dp.DoubleValue()
-	case pmetric.NumberDataPointValueTypeInt:
-		return float64(dp.IntValue())
-	default:
-		return 0
-	}
-}
-
-func splitServiceName(input string) (jobName string, instanceNum int) {
-	lastDotIndex := strings.LastIndex(input, ".")
-	if lastDotIndex != -1 {
-		// instance number is the last part of the service name
-		// we don't care about the error here because we assume the input is a valid service name
-		// f not, check the Oakestra backend
-		instanceNum, _ = strconv.Atoi(input[lastDotIndex+1:])
-
-		// job name is the part before the last dot
-		secondLastDotIndex := strings.LastIndex(input[:lastDotIndex], ".")
-		if secondLastDotIndex != -1 {
-			jobName = input[:secondLastDotIndex]
-		}
-	}
-	return
 }

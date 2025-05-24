@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math/rand/v2"
 
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/evaluation"
+	"github.com/smnzlnsk/opentelemetry-components/internal/shared/job"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/heuristicentity/entities/routing/evaluators"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/processor"
@@ -16,7 +18,11 @@ import (
 type routingEntity struct {
 	services       domain.Services
 	processorStore domain.ProcessorStore
-	logger         *zap.Logger
+	alert          domain.NotificationInterface[any]
+	route          domain.NotificationInterface[any]
+	schedule       domain.NotificationInterface[any]
+	// resultHistory  map[string]domain.EvaluationResult
+	logger *zap.Logger
 }
 
 func NewRoutingEntity(services domain.Services, logger *zap.Logger) domain.HeuristicEntity {
@@ -33,17 +39,17 @@ func NewRoutingEntity(services domain.Services, logger *zap.Logger) domain.Heuri
 
 	// Random Processor (static - only generates random value at initialization)
 	builder = wpt.NewBuilder("true", rand.Float64(), 0)
-	processorStore.Add(processor.NewProcessor("static-random", builder.BuildTree("static-random-tree", 1.0)))
+	processorStore.Add(processor.NewProcessor("static-random", builder.BuildTree("static-random-tree", 1.0), nil))
 
 	// Dynamic Random Processor (generates new random value on each evaluation)
 	dynamicRandomTree := evaluators.NewDynamicRandomEvaluator("dynamic-random")
 	closestEvaluator := evaluators.NewClosestEvaluator("closest")
 	underutilizedEvaluator := evaluators.NewUnderutilizedEvaluator("underutilized")
 
-	processorStore.Add(processor.NewProcessor("random", dynamicRandomTree))
-	processorStore.Add(processor.NewProcessor("RR", dynamicRandomTree))
-	processorStore.Add(processor.NewProcessor("closest", closestEvaluator))
-	processorStore.Add(processor.NewProcessor("underutilized", underutilizedEvaluator))
+	processorStore.Add(processor.NewProcessor("random", dynamicRandomTree, nil))
+	processorStore.Add(processor.NewProcessor("RR", dynamicRandomTree, nil))
+	processorStore.Add(processor.NewProcessor("closest", closestEvaluator, nil))
+	processorStore.Add(processor.NewProcessor("underutilized", underutilizedEvaluator, nil))
 
 	return &routingEntity{
 		processorStore: processorStore,
@@ -56,24 +62,24 @@ func NewRoutingEntity(services domain.Services, logger *zap.Logger) domain.Heuri
 // arguments:
 // - processorIdentifier: the identifier of the processor to evaluate
 // - first positional argument: jobRequest [domain.JobRequest]
-func (r *routingEntity) Evaluate(processorIdentifier string, arguments ...interface{}) (domain.EvaluationResult, error) {
+func (r *routingEntity) Evaluate(processorIdentifier string, arguments ...interface{}) error {
 	if len(arguments) == 0 {
 		r.logger.Error("No arguments provided to Evaluate")
-		return domain.EvaluationResult{JobName: "unknown", Values: make(map[string]map[string]interface{})}, errors.New("no arguments provided to Evaluate")
+		return errors.New("no arguments provided to Evaluate")
 	}
 
-	jobRequest, ok := arguments[0].(domain.JobRequest)
+	jobRequest, ok := arguments[0].(job.Request)
 	if !ok {
 		r.logger.Error("First argument is not a JobRequest", zap.Any("actual_type", fmt.Sprintf("%T", arguments[0])))
-		return domain.EvaluationResult{JobName: "unknown", Values: make(map[string]map[string]interface{})}, errors.New("first argument is not a JobRequest")
+		return errors.New("first argument is not a JobRequest")
 	}
 	jobName := jobRequest.JobData.JobName
 	instances := jobRequest.JobData.ServiceInstanceList
 
-	result := domain.EvaluationResult{
+	result := evaluation.Result{
 		JobName: jobName,
 		Values:  make(map[string]map[string]interface{}),
-		Results: make([]domain.EvaluationEntry, 0, len(instances)),
+		Results: make([]evaluation.Entry, 0, len(instances)),
 	}
 
 	values, err := r.services.GetMetricsService().GetJobMetricsAsMap(
@@ -82,7 +88,7 @@ func (r *routingEntity) Evaluate(processorIdentifier string, arguments ...interf
 	)
 	if err != nil {
 		r.logger.Error("Failed to get job metrics", zap.Error(err))
-		return result, err
+		return err
 	}
 
 	for i := range instances {
@@ -94,7 +100,7 @@ func (r *routingEntity) Evaluate(processorIdentifier string, arguments ...interf
 		evalResult, err := r.processorStore.Get(processorIdentifier).Process(instances[i].InstanceNumber, 1, instanceValues)
 		if err != nil {
 			r.logger.Error("Failed to process instance", zap.Error(err))
-			return result, err
+			return err
 		}
 		evalResult.IpType = processorIdentifier
 
@@ -102,15 +108,9 @@ func (r *routingEntity) Evaluate(processorIdentifier string, arguments ...interf
 			result.Results,
 			evalResult,
 		)
-
-		/*domain.EvaluationEntry{
-			InstanceNumber: instances[i].InstanceNumber,
-			IpType:         processorIdentifier,
-			Priority:       r.processorStore.Get(processorIdentifier).Evaluator().Evaluate(1, instanceValues),
-		}*/
 	}
 
-	return result, nil
+	return nil
 }
 
 func (r *routingEntity) Start() error {
@@ -133,4 +133,40 @@ func (r *routingEntity) AddProcessor(processor domain.Processor) {
 
 func (r *routingEntity) Processors() map[string]domain.Processor {
 	return r.processorStore.GetAll()
+}
+
+func (r *routingEntity) SetAlert(alert domain.NotificationInterface[any]) error {
+	if r.alert != nil {
+		return errors.New("alert already set")
+	}
+	r.alert = alert
+	return nil
+}
+
+func (r *routingEntity) SetRoute(route domain.NotificationInterface[any]) error {
+	if r.route != nil {
+		return errors.New("route already set")
+	}
+	r.route = route
+	return nil
+}
+
+func (r *routingEntity) SetSchedule(schedule domain.NotificationInterface[any]) error {
+	if r.schedule != nil {
+		return errors.New("schedule already set")
+	}
+	r.schedule = schedule
+	return nil
+}
+
+func (r *routingEntity) Alert() domain.NotificationInterface[any] {
+	return r.alert
+}
+
+func (r *routingEntity) Route() domain.NotificationInterface[any] {
+	return r.route
+}
+
+func (r *routingEntity) Schedule() domain.NotificationInterface[any] {
+	return r.schedule
 }
