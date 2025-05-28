@@ -22,8 +22,9 @@ func NewProcessor(
 	notificationConditions map[domain.NotificationInterfaceCapability]*govaluate.EvaluableExpression,
 ) domain.Processor {
 	return &processor{
-		identifier: identifier,
-		evaluator:  evaluator,
+		identifier:             identifier,
+		evaluator:              evaluator,
+		notificationConditions: notificationConditions,
 	}
 }
 
