@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand/v2"
 
 	"github.com/Knetic/govaluate"
 	"github.com/smnzlnsk/opentelemetry-components/pkg/evaluation"
@@ -12,7 +11,6 @@ import (
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/heuristicentity/entities/routing/evaluators"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/processor"
-	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/wpt"
 	"go.uber.org/zap"
 )
 
@@ -37,31 +35,35 @@ func NewRoutingEntity(services domain.Services, logger *zap.Logger) domain.Heuri
 
 	// TODO: Add processors here
 
-	// Round Robin Processor
-	// Default Processor is also Round Robin
-	builder := wpt.NewBuilder("true", 1, 0)
-	builder.Left("true", 0.5, 0)
-	builder.Right("false", 0, 0.5)
-	_ = builder.BuildTree("rr-tree", 1.0)
-
-	// Random Processor (static - only generates random value at initialization)
-	builder = wpt.NewBuilder("true", rand.Float64(), 0)
-	processorStore.Add(processor.NewProcessor("static-random", builder.BuildTree("static-random-tree", 1.0), nil))
-
-	// Dynamic Random Processor (generates new random value on each evaluation)
-	dynamicRandomTree := evaluators.NewDynamicRandomEvaluator("dynamic-random")
+	// First initialize the processors evaluator
+	fpsEvaluator := evaluators.NewFpsEvaluator("fps")
 	closestEvaluator := evaluators.NewClosestEvaluator("closest")
 	underutilizedEvaluator := evaluators.NewUnderutilizedEvaluator("underutilized")
 
-	processorStore.Add(processor.NewProcessor("random", dynamicRandomTree, nil))
-	processorStore.Add(processor.NewProcessor("RR", dynamicRandomTree, nil))
-	processorStore.Add(processor.NewProcessor("closest", closestEvaluator, nil))
-	processorStore.Add(processor.NewProcessor("underutilized", underutilizedEvaluator, nil))
+	// Create the processor notification conditions
+	// This will inherenetly mean that the entity has the respective notification interfaces set
+	expression, err := govaluate.NewEvaluableExpression("true")
+	if err != nil {
+		logger.Error("Failed to create evaluable expression", zap.Error(err))
+		return nil
+	}
+
+	conditions := map[domain.NotificationInterfaceCapability]*govaluate.EvaluableExpression{
+		domain.NotificationInterfaceCapability_Alert:    expression,
+		domain.NotificationInterfaceCapability_Route:    expression,
+		domain.NotificationInterfaceCapability_Schedule: expression,
+	}
+
+	// Create and add the processors to the processor store
+	processorStore.Add(processor.NewProcessor("fps", fpsEvaluator, conditions))
+	processorStore.Add(processor.NewProcessor("closest", closestEvaluator, conditions))
+	processorStore.Add(processor.NewProcessor("underutilized", underutilizedEvaluator, conditions))
 
 	return &routingEntity{
 		processorStore: processorStore,
 		logger:         logger,
 		services:       services,
+		// notification interfaces are set later
 	}
 }
 
@@ -158,7 +160,10 @@ func (r *routingEntity) Evaluate(arguments ...interface{}) error {
 		}
 
 		if conditionalResult {
-			notificationInterface.Notify(result)
+			notification := result
+			notification.Values = nil
+			notificationInterface.Notify(notification)
+			break
 		}
 	}
 	return nil
