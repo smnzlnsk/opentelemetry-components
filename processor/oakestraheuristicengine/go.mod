@@ -4,21 +4,17 @@ go 1.23.0
 
 require (
 	github.com/Knetic/govaluate v3.0.0+incompatible
-	github.com/google/go-cmp v0.6.0
-	github.com/smnzlnsk/monitoring-proto-lib v0.0.13
+	github.com/smnzlnsk/opentelemetry-components v0.0.1
 	github.com/stretchr/testify v1.10.0
 	go.mongodb.org/mongo-driver v1.17.3
 	go.opentelemetry.io/collector/component v0.109.0
 	go.opentelemetry.io/collector/confmap v1.15.0
 	go.opentelemetry.io/collector/consumer v0.109.0
 	go.opentelemetry.io/collector/consumer/consumertest v0.109.0
-	go.opentelemetry.io/collector/filter v0.109.0
 	go.opentelemetry.io/collector/pdata v1.15.0
 	go.opentelemetry.io/collector/processor v0.109.0
-	go.opentelemetry.io/collector/receiver v0.109.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/zap v1.27.0
-	google.golang.org/grpc v1.66.0
 )
 
 require (
@@ -57,7 +53,6 @@ require (
 	go.opentelemetry.io/collector/pdata/pprofile v0.109.0 // indirect
 	go.opentelemetry.io/collector/pdata/testdata v0.109.0 // indirect
 	go.opentelemetry.io/collector/processor/processorprofiles v0.109.0 // indirect
-	go.opentelemetry.io/collector/receiver/receiverprofiles v0.109.0 // indirect
 	go.opentelemetry.io/otel v1.29.0 // indirect
 	go.opentelemetry.io/otel/exporters/prometheus v0.51.0 // indirect
 	go.opentelemetry.io/otel/metric v1.29.0 // indirect
@@ -71,6 +66,7 @@ require (
 	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240822170219-fc7c04adadcd // indirect
+	google.golang.org/grpc v1.66.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
