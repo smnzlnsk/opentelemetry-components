@@ -8,12 +8,6 @@ import (
 	"go.opentelemetry.io/collector/confmap"
 )
 
-const (
-	notificationInterfaceKey = "interfaces"
-	httpServerKey            = "http_server"
-	mongodbKey               = "mongodb"
-)
-
 // Config defines the configuration for the oakestraheuristicengine processor.
 type Config struct {
 	// Add your configuration fields here
