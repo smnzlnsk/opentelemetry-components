@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/database"
-	metric "github.com/smnzlnsk/opentelemetry-components/internal/shared/metric"
-	datapoint "github.com/smnzlnsk/opentelemetry-components/internal/shared/metric/datapoint"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/database"
+	metric "github.com/smnzlnsk/opentelemetry-components/pkg/metric"
+	datapoint "github.com/smnzlnsk/opentelemetry-components/pkg/metric/datapoint"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 )

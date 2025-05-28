@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/metric"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/metric"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 )
 

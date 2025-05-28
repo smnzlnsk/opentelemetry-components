@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"math/rand/v2"
 
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/evaluation"
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/job"
+	"github.com/Knetic/govaluate"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/evaluation"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/job"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/heuristicentity/entities/routing/evaluators"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/processor"
@@ -23,6 +24,12 @@ type routingEntity struct {
 	schedule       domain.NotificationInterface[any]
 	// resultHistory  map[string]domain.EvaluationResult
 	logger *zap.Logger
+}
+
+var notificationOrder = []domain.NotificationInterfaceCapability{
+	domain.NotificationInterfaceCapability_Alert,
+	domain.NotificationInterfaceCapability_Route,
+	domain.NotificationInterfaceCapability_Schedule,
 }
 
 func NewRoutingEntity(services domain.Services, logger *zap.Logger) domain.HeuristicEntity {
@@ -62,16 +69,27 @@ func NewRoutingEntity(services domain.Services, logger *zap.Logger) domain.Heuri
 // arguments:
 // - processorIdentifier: the identifier of the processor to evaluate
 // - first positional argument: jobRequest [domain.JobRequest]
-func (r *routingEntity) Evaluate(processorIdentifier string, arguments ...interface{}) error {
+func (r *routingEntity) Evaluate(arguments ...interface{}) error {
 	if len(arguments) == 0 {
 		r.logger.Error("No arguments provided to Evaluate")
 		return errors.New("no arguments provided to Evaluate")
 	}
 
-	jobRequest, ok := arguments[0].(job.Request)
+	if len(arguments) < 2 {
+		r.logger.Error("Not enough arguments provided to Evaluate")
+		return errors.New("not enough arguments provided to Evaluate")
+	}
+
+	processorIdentifier, ok := arguments[0].(string)
 	if !ok {
-		r.logger.Error("First argument is not a JobRequest", zap.Any("actual_type", fmt.Sprintf("%T", arguments[0])))
-		return errors.New("first argument is not a JobRequest")
+		r.logger.Error("First argument is not a string", zap.Any("actual_type", fmt.Sprintf("%T", arguments[0])))
+		return errors.New("first argument is not a string")
+	}
+
+	jobRequest, ok := arguments[1].(job.Request)
+	if !ok {
+		r.logger.Error("Second argument is not a JobRequest", zap.Any("actual_type", fmt.Sprintf("%T", arguments[1])))
+		return errors.New("second argument is not a JobRequest")
 	}
 	jobName := jobRequest.JobData.JobName
 	instances := jobRequest.JobData.ServiceInstanceList
@@ -91,13 +109,15 @@ func (r *routingEntity) Evaluate(processorIdentifier string, arguments ...interf
 		return err
 	}
 
+	processor := r.processorStore.Get(processorIdentifier)
+
 	for i := range instances {
 		instanceName := fmt.Sprintf("%s.instance.%d", jobName, instances[i].InstanceNumber)
 		instanceValues := values.InstanceMetricsForEvaluation(instanceName)
 
 		result.Values[instanceName] = instanceValues
 
-		evalResult, err := r.processorStore.Get(processorIdentifier).Process(instances[i].InstanceNumber, 1, instanceValues)
+		evalResult, err := processor.Process(instances[i].InstanceNumber, 1, instanceValues)
 		if err != nil {
 			r.logger.Error("Failed to process instance", zap.Error(err))
 			return err
@@ -110,7 +130,73 @@ func (r *routingEntity) Evaluate(processorIdentifier string, arguments ...interf
 		)
 	}
 
+	// Now that we have the results, we can evaluate the notification conditions
+	// This will trigger a notification about a job, where necessary
+	conditions := processor.GetCapabilities()
+
+	for _, capability := range notificationOrder {
+		if enabled, exists := conditions[capability]; !exists || !enabled {
+			continue
+		}
+
+		notificationInterface := r.getNotificationInterface(capability)
+		if notificationInterface == nil {
+			r.logger.Error("No notification interface found for capability", zap.String("capability", string(capability)))
+			continue
+		}
+
+		condition := processor.GetNotificationCondition(capability)
+		if condition == nil {
+			r.logger.Error("No notification condition found for capability", zap.String("capability", string(capability)))
+			continue
+		}
+
+		conditionalResult, err := r.evaluateCondition(condition, result)
+		if err != nil {
+			r.logger.Error("Failed to evaluate condition", zap.Error(err))
+			return err
+		}
+
+		if conditionalResult {
+			notificationInterface.Notify(result)
+		}
+	}
 	return nil
+}
+
+func (r *routingEntity) getNotificationInterface(capability domain.NotificationInterfaceCapability) domain.NotificationInterface[any] {
+	switch capability {
+	case domain.NotificationInterfaceCapability_Alert:
+		return r.alert
+	case domain.NotificationInterfaceCapability_Route:
+		return r.route
+	case domain.NotificationInterfaceCapability_Schedule:
+		return r.schedule
+	default:
+		return nil
+	}
+}
+
+func (r *routingEntity) evaluateCondition(condition *govaluate.EvaluableExpression, results evaluation.Result) (bool, error) {
+	values := make(map[string]interface{})
+
+	for _, result := range results.Results {
+		values[fmt.Sprintf("%s.instance.%d", results.JobName, result.InstanceNumber)] = result.Priority
+	}
+
+	conditional, err := condition.Evaluate(values)
+	if err != nil {
+		r.logger.Error("Failed to evaluate condition", zap.Error(err))
+		return false, err
+	}
+
+	conditionalResult, ok := conditional.(bool)
+	if !ok {
+		r.logger.Error("Conditional result is not a boolean", zap.Any("conditional", conditional))
+		return false, errors.New("conditional result is not a boolean")
+	}
+
+	return conditionalResult, nil
 }
 
 func (r *routingEntity) Start() error {

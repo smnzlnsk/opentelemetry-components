@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/config"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/config"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"

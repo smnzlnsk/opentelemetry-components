@@ -3,9 +3,9 @@ package domain
 import (
 	"context"
 
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/calculation"
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/contract"
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/database"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/calculation"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/contract"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/database"
 )
 
 type Services interface {

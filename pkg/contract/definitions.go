@@ -1,6 +1,6 @@
 package contract
 
-import "github.com/smnzlnsk/opentelemetry-components/internal/shared/calculation"
+import "github.com/smnzlnsk/opentelemetry-components/pkg/calculation"
 
 type Key struct {
 	Service string

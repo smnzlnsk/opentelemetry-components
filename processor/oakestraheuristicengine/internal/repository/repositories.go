@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/database"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/database"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"go.uber.org/zap"
 )

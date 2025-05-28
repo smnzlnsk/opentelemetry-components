@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/job"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/job"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"go.uber.org/zap"
 )

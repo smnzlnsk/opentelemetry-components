@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/database"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/database"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"go.uber.org/zap"
 )
@@ -25,6 +25,6 @@ func (s *metricsService) GetJobMetrics(ctx context.Context, jobName string) (dat
 	return s.repository.GetJobMetrics(ctx, jobName)
 }
 
-func (s *metricsService) GetJobMetricsAsMap(ctx context.Context, jobName string) (database.MapHostMetrics, error) {
+func (s *metricsService) GetJobMetricsAsMap(ctx context.Context, jobName string) (database.HostMetricsMap, error) {
 	return s.repository.GetJobMetricsAsMap(ctx, jobName)
 }

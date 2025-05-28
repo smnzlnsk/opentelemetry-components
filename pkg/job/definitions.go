@@ -3,7 +3,7 @@ package job
 import (
 	"time"
 
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/database"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/database"
 )
 
 // TODO: remove redundancy between appName and job_name in JobData

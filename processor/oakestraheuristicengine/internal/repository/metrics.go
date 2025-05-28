@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/database"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/database"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/transformers"
 	"go.mongodb.org/mongo-driver/bson"
@@ -86,10 +86,10 @@ func (r *metricsRepository) GetJobMetrics(ctx context.Context, jobName string) (
 	return result, nil
 }
 
-func (r *metricsRepository) GetJobMetricsAsMap(ctx context.Context, jobName string) (database.MapHostMetrics, error) {
+func (r *metricsRepository) GetJobMetricsAsMap(ctx context.Context, jobName string) (database.HostMetricsMap, error) {
 	metrics, err := r.GetJobMetrics(ctx, jobName)
 	if err != nil {
-		return database.MapHostMetrics{}, err
+		return database.HostMetricsMap{}, err
 	}
-	return r.transformer.TransformDBHostMetricsToMap(metrics)
+	return r.transformer.TransformHostMetricsToMap(metrics)
 }

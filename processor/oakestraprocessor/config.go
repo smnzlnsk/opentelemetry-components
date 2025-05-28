@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/config"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/config"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap"

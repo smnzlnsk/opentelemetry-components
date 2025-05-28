@@ -1,7 +1,7 @@
 package applicationprocessor
 
 import (
-	datapoint "github.com/smnzlnsk/opentelemetry-components/internal/shared/metric/datapoint"
+	datapoint "github.com/smnzlnsk/opentelemetry-components/pkg/metric/datapoint"
 )
 
 // FormulaToMetricMap is a map of service assigned formula to metric name

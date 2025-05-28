@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/calculation"
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/contract"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/calculation"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/contract"
 )
 
 type ContractManager interface {

@@ -13,7 +13,10 @@ type HeuristicEntityFactory interface {
 type HeuristicEntity interface {
 	Processors() map[string]Processor
 	AddProcessor(processor Processor)
-	Evaluate(processorIdentifier string, arguments ...interface{}) error
+	// Evaluate evaluates the heuristics
+	// The arguments depend on the entity implementation
+	// Therefore, the arguments are passed as a variadic argument
+	Evaluate(arguments ...interface{}) error
 	Start() error
 	Shutdown() error
 	// Set the notification interfaces on the heuristic entity

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/Knetic/govaluate"
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/evaluation"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/evaluation"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
@@ -101,4 +101,8 @@ func (m *mockProcessor) Process(instanceNumber int, prev float64, params map[str
 
 func (m *mockProcessor) GetNotificationCondition(capability domain.NotificationInterfaceCapability) *govaluate.EvaluableExpression {
 	return nil
+}
+
+func (m *mockProcessor) GetCapabilities() map[domain.NotificationInterfaceCapability]bool {
+	return make(map[domain.NotificationInterfaceCapability]bool)
 }

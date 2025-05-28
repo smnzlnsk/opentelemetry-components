@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/config"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/config"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/metadata"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/processor/applicationprocessor"

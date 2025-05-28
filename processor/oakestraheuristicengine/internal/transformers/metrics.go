@@ -3,7 +3,7 @@ package transformers
 import (
 	"strconv"
 
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/database"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/database"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.uber.org/zap"
@@ -53,20 +53,21 @@ func (t *metricsTransformer) ExtractHost(md pmetric.Metrics) string {
 }
 
 // TransformDBHostMetricsToMap transforms DBHostMetrics to a MapHostMetrics
-func (t *metricsTransformer) TransformDBHostMetricsToMap(dbHostMetrics database.HostMetrics) (database.MapHostMetrics, error) {
-	hostMetrics := make(database.MapHostMetrics)
+func (t *metricsTransformer) TransformHostMetricsToMap(dbHostMetrics database.HostMetrics) (database.HostMetricsMap, error) {
+	hostMetrics := make(database.HostMetricsMap)
 
 	// Initialize the host entry with empty maps
-	hostMetrics[dbHostMetrics.Host] = database.MetricsStruct{
+	hostMetrics[dbHostMetrics.Host] = database.MetricsMap{
 		HostMetrics:            make(map[string]float64),
-		ServiceInstanceMetrics: make(map[string]database.ServiceInstanceMetricsMap),
+		ServiceInstanceMetrics: make(map[string]map[string]float64),
 	}
 
 	// Process system metrics
 	for _, systemMetric := range dbHostMetrics.SystemMetrics {
 		for i, datapoint := range systemMetric.Datapoints {
 			// Create a unique identifier for the metric
-			metricID := systemMetric.Identifier.Name + "|" + systemMetric.Identifier.State + "|" + strconv.Itoa(i)
+			age := calculateAge(len(systemMetric.Datapoints), i)
+			metricID := buildMetricID(systemMetric.Identifier.Name, systemMetric.Identifier.State, age)
 			hostMetrics[dbHostMetrics.Host].HostMetrics[metricID] = datapoint.Value
 		}
 	}
@@ -78,20 +79,29 @@ func (t *metricsTransformer) TransformDBHostMetricsToMap(dbHostMetrics database.
 
 		// Initialize the service metrics map if it doesn't exist
 		if _, exists := hostMetrics[dbHostMetrics.Host].ServiceInstanceMetrics[serviceID]; !exists {
-			hostMetrics[dbHostMetrics.Host].ServiceInstanceMetrics[serviceID] = make(database.ServiceInstanceMetricsMap)
+			hostMetrics[dbHostMetrics.Host].ServiceInstanceMetrics[serviceID] = make(map[string]float64)
 		}
 
 		// Add each metric datapoint
 		for _, metric := range serviceInstance.Metrics {
 			for i, datapoint := range metric.Datapoints {
 				// Create a unique identifier for the metric
-				metricID := metric.Identifier.Name + "|" + metric.Identifier.State + "|" + strconv.Itoa(i)
+				age := calculateAge(len(metric.Datapoints), i)
+				metricID := buildMetricID(metric.Identifier.Name, metric.Identifier.State, age)
 				hostMetrics[dbHostMetrics.Host].ServiceInstanceMetrics[serviceID][metricID] = datapoint.Value
 			}
 		}
 	}
 
 	return hostMetrics, nil
+}
+
+func buildMetricID(name string, state string, age int) string {
+	return name + "(" + strconv.Itoa(age) + ")" + "{" + state + "}"
+}
+
+func calculateAge(length int, index int) int {
+	return (length - 1) - index
 }
 
 // mergeHostMetrics merges new metrics into existing host metrics

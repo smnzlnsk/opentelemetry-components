@@ -12,8 +12,8 @@ type policy struct {
 
 var _ domain.Policy = &policy{}
 
-func (p *policy) Enforce(processorIdentifier string, arguments ...interface{}) error {
-	err := p.heuristicEntity.Evaluate(processorIdentifier, arguments...)
+func (p *policy) Enforce(arguments ...interface{}) error {
+	err := p.heuristicEntity.Evaluate(arguments...)
 	if err != nil {
 		return err
 	}

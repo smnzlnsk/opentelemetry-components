@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/calculation"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/calculation"
 )
 
 // Regex for extracting metrics from formula

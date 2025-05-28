@@ -11,7 +11,7 @@ type PolicyBuilder interface {
 }
 
 type Policy interface {
-	Enforce(processorIdentifier string, arguments ...interface{}) error
+	Enforce(arguments ...interface{}) error
 	Name() string
 	HeuristicEntity() HeuristicEntity
 }

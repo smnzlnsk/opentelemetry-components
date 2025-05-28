@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/calculation"
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/contract"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/calculation"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/contract"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraprocessor/internal/domain"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"

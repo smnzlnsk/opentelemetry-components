@@ -3,7 +3,7 @@ package database
 import (
 	"time"
 
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/metric"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/metric"
 )
 
 type MetricDatapoint struct {
@@ -28,16 +28,17 @@ type HostMetrics struct {
 	ServiceInstanceMetrics []ServiceInstanceMetrics `json:"service_instance_metrics" bson:"service_instance_metrics"`
 }
 
-type MapHostMetrics map[string]MetricsStruct
-type ServiceInstanceMetricsMap map[string]float64 // the string depicts the full metrics identifier with <metric_name>|<metric_state>|<datapoint_number>
-type MetricsStruct struct {
-	// the string depicts the full metrics identifier with <metric_name>|<metric_state>|<datapoint_number>
+// HostMetricsMap is a map of host metrics
+// The key is the host identifier
+type HostMetricsMap map[string]MetricsMap
+type MetricsMap struct {
+	// the string depicts the full metrics identifier with metric(age){state}
 	HostMetrics map[string]float64
-	// the string is the full service identifier with <job_name>.instance.<instance_number>
-	ServiceInstanceMetrics map[string]ServiceInstanceMetricsMap
+	// the string is the full service identifier with map[job_name.instance.instance_number]map[metric(age){state}]float64
+	ServiceInstanceMetrics map[string]map[string]float64
 }
 
-func (m *MapHostMetrics) InstanceMetricsForEvaluation(serviceIdentifier string) map[string]interface{} {
+func (m *HostMetricsMap) InstanceMetricsForEvaluation(serviceIdentifier string) map[string]interface{} {
 	values := make(map[string]interface{})
 	for _, hostMetrics := range *m {
 		// Only include host metrics if there's a match for the serviceIdentifier

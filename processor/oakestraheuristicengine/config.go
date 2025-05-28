@@ -3,7 +3,7 @@ package oakestraheuristicengine
 import (
 	"errors"
 
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/config"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/config"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap"
 )

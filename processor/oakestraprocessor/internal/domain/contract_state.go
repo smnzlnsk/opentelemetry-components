@@ -8,10 +8,10 @@ import (
 
 	"github.com/Knetic/govaluate"
 	pb "github.com/smnzlnsk/monitoring-proto-lib/gen/go/monitoring_proto_lib/monitoring/v1"
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/calculation"
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/contract"
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/formulae"
-	datapoint "github.com/smnzlnsk/opentelemetry-components/internal/shared/metric/datapoint"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/calculation"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/contract"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/formulae"
+	datapoint "github.com/smnzlnsk/opentelemetry-components/pkg/metric/datapoint"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.uber.org/zap"
 )

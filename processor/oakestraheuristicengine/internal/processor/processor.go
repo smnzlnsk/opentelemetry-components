@@ -2,7 +2,7 @@ package processor
 
 import (
 	"github.com/Knetic/govaluate"
-	"github.com/smnzlnsk/opentelemetry-components/internal/shared/evaluation"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/evaluation"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
@@ -49,4 +49,12 @@ func (p *processor) Process(instanceNumber int, prev float64, params map[string]
 
 func (p *processor) GetNotificationCondition(capability domain.NotificationInterfaceCapability) *govaluate.EvaluableExpression {
 	return p.notificationConditions[capability]
+}
+
+func (p *processor) GetCapabilities() map[domain.NotificationInterfaceCapability]bool {
+	capabilities := make(map[domain.NotificationInterfaceCapability]bool)
+	for capability, condition := range p.notificationConditions {
+		capabilities[capability] = condition != nil
+	}
+	return capabilities
 }
