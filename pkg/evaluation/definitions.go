@@ -16,3 +16,5 @@ type Result struct {
 	Values  map[string]map[string]interface{} `json:"values,omitempty"`
 	Results []Entry                           `json:"results"`
 }
+
+type Function func(map[string]interface{}) (bool, error)
