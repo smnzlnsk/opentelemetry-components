@@ -1,10 +1,5 @@
 package evaluation
 
-type Evaluation struct {
-	JobName string
-	Entries []Entry
-}
-
 type Entry struct {
 	InstanceNumber int     `json:"instance_number"`
 	Priority       float64 `json:"priority"`
