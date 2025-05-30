@@ -33,12 +33,19 @@ func (cfg *Config) Validate() error {
 		return errors.New("folder path must be absolute")
 	}
 
-	info, err := os.Stat(cfg.Folder)
+	var info os.FileInfo
+	info, err = os.Stat(cfg.Folder)
 	// create folder if it does not exist
 	if errors.Is(err, os.ErrNotExist) {
 		dirErr := os.MkdirAll(cfg.Folder, 0755)
 		if dirErr != nil {
 			return dirErr
+		}
+		// update info after creating the folder
+		// otherwise, info will be nil and we cause a panic due to nil access in line 54
+		info, err = os.Stat(cfg.Folder)
+		if err != nil {
+			return err
 		}
 	} else if err != nil {
 		return err
