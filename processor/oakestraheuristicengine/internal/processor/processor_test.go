@@ -12,7 +12,7 @@ func TestNewHeuristicProcessor(t *testing.T) {
 	tree1 := wpt.NewBuilder("x > 5", 2.0, 0.5).BuildTree("tree1", 1.0)
 
 	// Initialize processor with mock trees
-	processor := NewProcessor("test_processor", tree1, nil)
+	processor := NewProcessor("test_processor", tree1)
 
 	// Assert processor was created
 	assert.NotNil(t, processor)
@@ -27,7 +27,7 @@ func TestHeuristicProcessorWorkflow(t *testing.T) {
 	// If true, returns 1.0, if false returns 2.0
 	testTree := wpt.NewBuilder("x > 5", 1.0, 2.0).BuildTree("test_tree", 1.0)
 
-	processor := NewProcessor("test_processor", testTree, nil)
+	processor := NewProcessor("test_processor", testTree)
 
 	// Test cases
 	testCases := []struct {

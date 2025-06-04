@@ -1,8 +1,10 @@
 package processor
 
 import (
-	"github.com/Knetic/govaluate"
+	"fmt"
+
 	"github.com/smnzlnsk/opentelemetry-components/pkg/evaluation"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/notification"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
@@ -12,20 +14,28 @@ type processor struct {
 	evaluator     domain.Evaluator
 	resultHistory map[string]evaluation.Result
 
-	// Notification conditions are set on a per processor basis
-	notificationConditions map[domain.NotificationInterfaceCapability]*govaluate.EvaluableExpression
+	// Notification conditions are set on a per processor basis - they are imported on creation from the associated evaluator
+	notificationConditions map[domain.NotificationInterfaceCapability]notification.Function
 }
 
 func NewProcessor(
 	identifier string,
 	evaluator domain.Evaluator,
-	notificationConditions map[domain.NotificationInterfaceCapability]*govaluate.EvaluableExpression,
 ) domain.Processor {
-	return &processor{
+	p := &processor{
 		identifier:             identifier,
 		evaluator:              evaluator,
-		notificationConditions: notificationConditions,
+		notificationConditions: make(map[domain.NotificationInterfaceCapability]notification.Function),
+		resultHistory:          make(map[string]evaluation.Result),
 	}
+
+	// Set the notification conditions on the processor
+	// If the evaluator does not have a condition for a capability, it SHOULD return a nil function
+	p.notificationConditions[domain.NotificationInterfaceCapability_Alert] = p.evaluator.AlarmCondition()
+	p.notificationConditions[domain.NotificationInterfaceCapability_Route] = p.evaluator.RouteCondition()
+	p.notificationConditions[domain.NotificationInterfaceCapability_Schedule] = p.evaluator.ScheduleCondition()
+
+	return p
 }
 
 func (p *processor) Identifier() string {
@@ -34,6 +44,10 @@ func (p *processor) Identifier() string {
 
 func (p *processor) Evaluator() domain.Evaluator {
 	return p.evaluator
+}
+
+func (p *processor) History() map[string]evaluation.Result {
+	return p.resultHistory
 }
 
 func (p *processor) Process(instanceNumber int, prev float64, params map[string]interface{}) (evaluation.Entry, error) {
@@ -48,7 +62,7 @@ func (p *processor) Process(instanceNumber int, prev float64, params map[string]
 	}, nil
 }
 
-func (p *processor) GetNotificationCondition(capability domain.NotificationInterfaceCapability) *govaluate.EvaluableExpression {
+func (p *processor) GetNotificationFunction(capability domain.NotificationInterfaceCapability) notification.Function {
 	return p.notificationConditions[capability]
 }
 
@@ -56,6 +70,9 @@ func (p *processor) GetCapabilities() map[domain.NotificationInterfaceCapability
 	capabilities := make(map[domain.NotificationInterfaceCapability]bool)
 	for capability, condition := range p.notificationConditions {
 		capabilities[capability] = condition != nil
+		if condition != nil {
+			fmt.Println("capability", capability, "condition", condition)
+		}
 	}
 	return capabilities
 }

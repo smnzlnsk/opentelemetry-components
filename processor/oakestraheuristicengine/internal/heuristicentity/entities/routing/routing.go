@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
+	"sync"
 
-	"github.com/Knetic/govaluate"
 	"github.com/smnzlnsk/opentelemetry-components/pkg/evaluation"
 	"github.com/smnzlnsk/opentelemetry-components/pkg/job"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/notification"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/heuristicentity/entities/routing/evaluators"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/processor"
@@ -20,8 +22,14 @@ type routingEntity struct {
 	alert          domain.NotificationInterface[any]
 	route          domain.NotificationInterface[any]
 	schedule       domain.NotificationInterface[any]
-	// resultHistory  map[string]domain.EvaluationResult
-	logger *zap.Logger
+	prevResults    map[resultHistoryKey]float64
+	logger         *zap.Logger
+}
+
+type resultHistoryKey struct {
+	jobName        string
+	instanceNumber int
+	ipType         string
 }
 
 var notificationOrder = []domain.NotificationInterfaceCapability{
@@ -40,29 +48,16 @@ func NewRoutingEntity(services domain.Services, logger *zap.Logger) domain.Heuri
 	closestEvaluator := evaluators.NewClosestEvaluator("closest")
 	underutilizedEvaluator := evaluators.NewUnderutilizedEvaluator("underutilized")
 
-	// Create the processor notification conditions
-	// This will inherenetly mean that the entity has the respective notification interfaces set
-	expression, err := govaluate.NewEvaluableExpression("true")
-	if err != nil {
-		logger.Error("Failed to create evaluable expression", zap.Error(err))
-		return nil
-	}
-
-	conditions := map[domain.NotificationInterfaceCapability]*govaluate.EvaluableExpression{
-		domain.NotificationInterfaceCapability_Alert:    expression,
-		domain.NotificationInterfaceCapability_Route:    expression,
-		domain.NotificationInterfaceCapability_Schedule: expression,
-	}
-
 	// Create and add the processors to the processor store
-	processorStore.Add(processor.NewProcessor("fps", fpsEvaluator, conditions))
-	processorStore.Add(processor.NewProcessor("closest", closestEvaluator, conditions))
-	processorStore.Add(processor.NewProcessor("underutilized", underutilizedEvaluator, conditions))
+	processorStore.Add(processor.NewProcessor("fps", fpsEvaluator))
+	processorStore.Add(processor.NewProcessor("closest", closestEvaluator))
+	processorStore.Add(processor.NewProcessor("underutilized", underutilizedEvaluator))
 
 	return &routingEntity{
 		processorStore: processorStore,
 		logger:         logger,
 		services:       services,
+		prevResults:    make(map[resultHistoryKey]float64),
 		// notification interfaces are set later
 	}
 }
@@ -117,7 +112,7 @@ func (r *routingEntity) Evaluate(arguments ...interface{}) error {
 		instanceName := fmt.Sprintf("%s.instance.%d", jobName, instances[i].InstanceNumber)
 		instanceValues := values.InstanceMetricsForEvaluation(instanceName)
 
-		result.Values[instanceName] = instanceValues
+		result.Values[fmt.Sprintf("job.instance.%d", instances[i].InstanceNumber)] = instanceValues
 
 		evalResult, err := processor.Process(instances[i].InstanceNumber, 1, instanceValues)
 		if err != nil {
@@ -136,6 +131,48 @@ func (r *routingEntity) Evaluate(arguments ...interface{}) error {
 	// This will trigger a notification about a job, where necessary
 	conditions := processor.GetCapabilities()
 
+	vs := make(map[string]interface{})
+	is := []int{}
+	once := sync.Once{}
+	doEvaluate := false
+
+	// Check if we have any conditions to evaluate
+	// If we do, we need to flatten the result values for evaluation
+	for _, enabled := range conditions {
+		if !enabled {
+			continue
+		}
+		once.Do(func() {
+			doEvaluate = true
+		})
+		// Flatten the result values for evaluation
+		for _, result := range result.Results {
+			current := result.Priority
+			is = append(is, result.InstanceNumber)
+			previous := r.prevResults[resultHistoryKey{
+				jobName:        jobName,
+				instanceNumber: result.InstanceNumber,
+				ipType:         result.IpType,
+			}]
+			delta := math.Abs(current - previous)
+			vs[fmt.Sprintf("job.instance.%d.result{%s}", result.InstanceNumber, "current")] = current
+			vs[fmt.Sprintf("job.instance.%d.result{%s}", result.InstanceNumber, "previous")] = previous
+			vs[fmt.Sprintf("job.instance.%d.result{%s}", result.InstanceNumber, "delta")] = delta
+		}
+
+		for name, metrics := range result.Values {
+			for metricName, metricValue := range metrics {
+				vs[fmt.Sprintf("%s.%s", name, metricName)] = metricValue
+			}
+		}
+		break
+	}
+
+	// If we don't have any conditions to evaluate, we can return early
+	if !doEvaluate {
+		return nil
+	}
+
 	for _, capability := range notificationOrder {
 		if enabled, exists := conditions[capability]; !exists || !enabled {
 			continue
@@ -147,13 +184,13 @@ func (r *routingEntity) Evaluate(arguments ...interface{}) error {
 			continue
 		}
 
-		condition := processor.GetNotificationCondition(capability)
+		condition := processor.GetNotificationFunction(capability)
 		if condition == nil {
 			r.logger.Error("No notification condition found for capability", zap.String("capability", string(capability)))
 			continue
 		}
 
-		conditionalResult, err := r.evaluateCondition(condition, result)
+		conditionalResult, err := r.evaluateCondition(condition, vs, is)
 		if err != nil {
 			r.logger.Error("Failed to evaluate condition", zap.Error(err))
 			return err
@@ -166,6 +203,16 @@ func (r *routingEntity) Evaluate(arguments ...interface{}) error {
 			break
 		}
 	}
+
+	// Update the result history
+	for _, resultEntry := range result.Results {
+		r.prevResults[resultHistoryKey{
+			jobName:        result.JobName,
+			instanceNumber: resultEntry.InstanceNumber,
+			ipType:         resultEntry.IpType,
+		}] = resultEntry.Priority
+	}
+
 	return nil
 }
 
@@ -182,26 +229,16 @@ func (r *routingEntity) getNotificationInterface(capability domain.NotificationI
 	}
 }
 
-func (r *routingEntity) evaluateCondition(condition *govaluate.EvaluableExpression, results evaluation.Result) (bool, error) {
-	values := make(map[string]interface{})
+func (r *routingEntity) evaluateCondition(conditionEval notification.Function, values map[string]interface{}, instances []int) (bool, error) {
+	fmt.Println("Evaluating", instances)
 
-	for _, result := range results.Results {
-		values[fmt.Sprintf("%s.instance.%d", results.JobName, result.InstanceNumber)] = result.Priority
-	}
-
-	conditional, err := condition.Evaluate(values)
+	conditional, err := conditionEval(values, instances)
 	if err != nil {
 		r.logger.Error("Failed to evaluate condition", zap.Error(err))
 		return false, err
 	}
 
-	conditionalResult, ok := conditional.(bool)
-	if !ok {
-		r.logger.Error("Conditional result is not a boolean", zap.Any("conditional", conditional))
-		return false, errors.New("conditional result is not a boolean")
-	}
-
-	return conditionalResult, nil
+	return conditional, nil
 }
 
 func (r *routingEntity) Start() error {

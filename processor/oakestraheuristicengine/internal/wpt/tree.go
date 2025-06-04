@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Knetic/govaluate"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/notification"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 )
 
@@ -91,4 +92,16 @@ func evaluateDecision(decision string, params map[string]interface{}) (bool, err
 	}
 
 	return boolResult, nil
+}
+
+func (d *decisionTree) AlarmCondition() notification.Function {
+	return nil
+}
+
+func (d *decisionTree) RouteCondition() notification.Function {
+	return nil
+}
+
+func (d *decisionTree) ScheduleCondition() notification.Function {
+	return nil
 }
