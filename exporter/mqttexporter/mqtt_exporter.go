@@ -3,6 +3,7 @@ package mqttexporter // import github.com/smnzlnsk/opentelemetry-components/expo
 import (
 	"context"
 	"fmt"
+	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"go.opentelemetry.io/collector/component"
@@ -25,6 +26,30 @@ func newMQTTExporter(cfg *Config, logger *zap.Logger) (*mqttExporter, error) {
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(uri)
 	opts.SetClientID(cfg.ClientID)
+
+	// Set connection timeout
+	opts.SetConnectTimeout(30 * time.Second)
+
+	// Auto reconnect settings
+	opts.SetAutoReconnect(true)
+	opts.SetMaxReconnectInterval(5 * time.Minute)
+	opts.SetKeepAlive(30 * time.Second)
+
+	// Set clean session to false for persistent session
+	opts.SetCleanSession(false)
+
+	// Set handlers for connection events
+	opts.SetConnectionLostHandler(func(client mqtt.Client, err error) {
+		logger.Warn("MQTT connection lost", zap.Error(err))
+	})
+
+	opts.SetOnConnectHandler(func(client mqtt.Client) {
+		logger.Info("MQTT connection established")
+	})
+
+	opts.SetReconnectingHandler(func(client mqtt.Client, opts *mqtt.ClientOptions) {
+		logger.Info("MQTT attempting to reconnect")
+	})
 
 	client := mqtt.NewClient(opts)
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
