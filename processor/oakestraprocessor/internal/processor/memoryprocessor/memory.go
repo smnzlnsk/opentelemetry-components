@@ -81,7 +81,7 @@ func (c *MemoryMetricProcessor) Start(ctx context.Context, _ component.Host) err
 		States  []string
 	}{
 		{
-			Formula: "([container.memory.usage] / [system.memory.usage]) * 1000000",
+			Formula: "([container.memory.usage] / [system.memory.limit{default}]) * 100",
 			States:  []string{"slab_reclaimable", "slab_unreclaimable", "used"},
 		},
 	}
