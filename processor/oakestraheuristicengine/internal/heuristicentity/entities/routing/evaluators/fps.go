@@ -20,7 +20,8 @@ func NewFpsEvaluator(identifier string) domain.Evaluator {
 	var routeCondition notification.Function
 
 	alertCondition = func(results map[string]interface{}, instances []int) (bool, error) {
-		for _, instance := range instances {
+		return true, nil
+		/*for _, instance := range instances {
 			prefix := fmt.Sprintf("job.instance.%d", instance) // Create current job instance prefix
 			in_0, ok := results[fmt.Sprintf("%s.service_fps(0){in}", prefix)].(float64)
 			if !ok {
@@ -41,7 +42,7 @@ func NewFpsEvaluator(identifier string) domain.Evaluator {
 
 		// TODO: Here we could start creating a view on the instance combinations and compare the results between instances
 
-		return false, nil
+		return false, nil*/
 	}
 
 	routeCondition = func(results map[string]interface{}, instances []int) (bool, error) {
