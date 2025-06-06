@@ -30,7 +30,6 @@ func NewUnderutilizedEvaluator(identifier string) domain.Evaluator {
 				continue
 			}
 			if delta > 0.2 {
-				fmt.Println("alert condition underutilized true", instance)
 				return true, nil
 			}
 
@@ -39,7 +38,6 @@ func NewUnderutilizedEvaluator(identifier string) domain.Evaluator {
 				continue
 			}
 			if usageTotal > 0.9 {
-				fmt.Println("alert condition underutilized true", instance)
 				return true, nil
 			}
 		}
@@ -53,7 +51,6 @@ func NewUnderutilizedEvaluator(identifier string) domain.Evaluator {
 				continue
 			}
 			if usageTotal > 0.5 {
-				fmt.Println("route condition underutilized true", instance)
 				return true, nil
 			}
 		}
@@ -101,9 +98,6 @@ func (e *underutilizedEvaluator) Evaluate(factor float64, arguments map[string]i
 	usageTotal := cpuUsageTotal + memoryUsageTotal
 
 	res := 1 - exponentialDecay(usageTotal, 0.02)
-
-	fmt.Println("usageTotal", usageTotal)
-	fmt.Println("res", res)
 	return res, nil
 }
 

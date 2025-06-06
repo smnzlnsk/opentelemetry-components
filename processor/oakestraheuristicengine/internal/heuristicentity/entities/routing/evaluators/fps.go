@@ -20,6 +20,7 @@ func NewFpsEvaluator(identifier string) domain.Evaluator {
 	var routeCondition notification.Function
 
 	alertCondition = func(results map[string]interface{}, instances []int) (bool, error) {
+		fmt.Println("triggering alert condition fps", instances)
 		return true, nil
 		/*for _, instance := range instances {
 			prefix := fmt.Sprintf("job.instance.%d", instance) // Create current job instance prefix

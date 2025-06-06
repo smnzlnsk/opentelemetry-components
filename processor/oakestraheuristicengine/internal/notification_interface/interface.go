@@ -44,6 +44,8 @@ func (n *notificationInterface[T]) Notify(notification T) error {
 		return fmt.Errorf("failed to send %s: %s", n.capability, resp.Status)
 	}
 
+	fmt.Println("notification sent", n.capability, notification)
+
 	return nil
 }
 
