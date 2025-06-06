@@ -111,14 +111,14 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 
 	// define notifiers
 	alertNotifier := routingNotificationInterfaceBuilder.
-		WithHost("localhost").
+		WithHost(p.config.ServiceManager.Host).
 		WithPort(p.config.ServiceManager.Port).
 		WithEndpoint("/api/net/routing/alert").
 		WithCapability(domain.NotificationInterfaceCapability_Alert).
 		Build()
 
 	routingNotifier := routingNotificationInterfaceBuilder.
-		WithHost("localhost").
+		WithHost(p.config.ServiceManager.Host).
 		WithPort(p.config.ServiceManager.Port).
 		WithEndpoint("/api/net/routing/update").
 		WithCapability(domain.NotificationInterfaceCapability_Route).
