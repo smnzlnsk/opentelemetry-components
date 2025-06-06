@@ -1,8 +1,6 @@
 package processor
 
 import (
-	"fmt"
-
 	"github.com/smnzlnsk/opentelemetry-components/pkg/evaluation"
 	"github.com/smnzlnsk/opentelemetry-components/pkg/notification"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
@@ -70,9 +68,6 @@ func (p *processor) GetCapabilities() map[domain.NotificationInterfaceCapability
 	capabilities := make(map[domain.NotificationInterfaceCapability]bool)
 	for capability, condition := range p.notificationConditions {
 		capabilities[capability] = condition != nil
-		if condition != nil {
-			fmt.Println("capability", capability, "condition", condition)
-		}
 	}
 	return capabilities
 }

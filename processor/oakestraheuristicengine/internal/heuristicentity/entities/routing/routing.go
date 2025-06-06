@@ -199,6 +199,7 @@ func (r *routingEntity) Evaluate(arguments ...interface{}) error {
 		if conditionalResult {
 			notification := result
 			notification.Values = nil
+			fmt.Println("sending notification", notification, capability)
 			notificationInterface.Notify(notification)
 			break
 		}
@@ -230,8 +231,6 @@ func (r *routingEntity) getNotificationInterface(capability domain.NotificationI
 }
 
 func (r *routingEntity) evaluateCondition(conditionEval notification.Function, values map[string]interface{}, instances []int) (bool, error) {
-	fmt.Println("Evaluating", instances)
-
 	conditional, err := conditionEval(values, instances)
 	if err != nil {
 		r.logger.Error("Failed to evaluate condition", zap.Error(err))
