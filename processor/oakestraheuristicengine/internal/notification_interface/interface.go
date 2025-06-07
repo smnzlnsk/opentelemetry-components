@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/logger"
 )
 
 type notificationInterface[T any] struct {
@@ -17,6 +18,10 @@ type notificationInterface[T any] struct {
 }
 
 var _ domain.NotificationInterface[any] = (*notificationInterface[any])(nil)
+
+func (n *notificationInterface[T]) String() string {
+	return fmt.Sprintf("http://%s:%d%s", n.host, n.port, n.endpoint)
+}
 
 func (n *notificationInterface[T]) Notify(notification T) error {
 	jsonData := map[string]interface{}{
@@ -34,11 +39,22 @@ func (n *notificationInterface[T]) Notify(notification T) error {
 		"application/json",
 		bytes.NewBuffer(data),
 	)
+
+	var responseStatus string
 	if err != nil {
-		return err
+		responseStatus = fmt.Sprintf("error: %s", err.Error())
+	} else {
+		defer resp.Body.Close()
+		responseStatus = resp.Status
 	}
 
-	defer resp.Body.Close()
+	if logger.IsCSVLoggerInitialized() {
+		notificationData, _ := json.Marshal(notification)
+		logError := logger.LogNotification(n.capability.String(), n.host, responseStatus, string(notificationData))
+		if logError != nil {
+			fmt.Println("error logging notification", logError)
+		}
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to send %s: %s", n.capability, resp.Status)

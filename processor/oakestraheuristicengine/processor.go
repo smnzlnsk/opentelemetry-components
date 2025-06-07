@@ -9,6 +9,7 @@ import (
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/heuristicentity"
 	internalhttp "github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/http"
+	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/logger"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/notification_interface"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/policy"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/repository"
@@ -70,6 +71,11 @@ func (p *heuristicEngineProcessor) Capabilities() consumer.Capabilities {
 }
 
 func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) error {
+	// initialize csv logger
+	if err := logger.InitCSVLogger("/metrics/heuristic_notifications.csv"); err != nil {
+		return err
+	}
+
 	// initialize mongodb client
 	dbClient, err := database.NewMongoDBClient(&p.config.MongoDB, p.logger)
 	if err != nil {
