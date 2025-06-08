@@ -8,15 +8,18 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/calculation"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/contract"
 	"go.uber.org/zap"
 )
 
 // RedisClient represents a Redis client implementation
 type RedisClient struct {
-	client       *redis.Client
-	logger       *zap.Logger
-	config       *RedisConfig
-	metricsStore MetricsStore
+	client        *redis.Client
+	logger        *zap.Logger
+	config        *RedisConfig
+	metricsStore  MetricsStore
+	contractStore ContractStore
 }
 
 // RedisConfig represents Redis configuration
@@ -56,6 +59,7 @@ func (c *RedisClient) Connect(ctx context.Context) error {
 
 	c.client = rdb
 	c.metricsStore = NewRedisMetricsStore(rdb, c.logger)
+	c.contractStore = NewRedisContractStore(rdb, c.logger)
 
 	c.logger.Info("Connected to Redis",
 		zap.String("host", c.config.Host),
@@ -77,6 +81,11 @@ func (c *RedisClient) Health(ctx context.Context) error {
 // GetMetricsStore returns the metrics store
 func (c *RedisClient) GetMetricsStore() MetricsStore {
 	return c.metricsStore
+}
+
+// GetContractStore returns the contract store
+func (c *RedisClient) GetContractStore() ContractStore {
+	return c.contractStore
 }
 
 // Close closes the Redis connection
@@ -360,4 +369,293 @@ func splitKey(key string) []string {
 	}
 
 	return result
+}
+
+// redisContractStore implements the ContractStore interface for Redis
+// Uses JSON serialization and Redis sets for indexing by processor
+type redisContractStore struct {
+	client *redis.Client
+	logger *zap.Logger
+}
+
+// Ensure redisContractStore implements the ContractStore interface
+var _ ContractStore = (*redisContractStore)(nil)
+
+// NewRedisContractStore creates a new Redis contract store
+func NewRedisContractStore(client *redis.Client, logger *zap.Logger) ContractStore {
+	return &redisContractStore{
+		client: client,
+		logger: logger,
+	}
+}
+
+// Create creates a new contract for a service
+func (s *redisContractStore) Create(ctx context.Context, ct calculation.Contract) error {
+	key := fmt.Sprintf("contracts:%s", ct.Service)
+
+	// Get existing document or create new one
+	var doc contract.Document
+	data, err := s.client.Get(ctx, key).Result()
+	if err != nil && err != redis.Nil {
+		return fmt.Errorf("failed to get existing contracts: %w", err)
+	}
+
+	if err == redis.Nil {
+		// Create new document
+		doc = contract.Document{
+			Service:   ct.Service,
+			Contracts: []calculation.Contract{},
+		}
+	} else {
+		// Parse existing document
+		if err := json.Unmarshal([]byte(data), &doc); err != nil {
+			return fmt.Errorf("failed to unmarshal existing contracts: %w", err)
+		}
+	}
+
+	// Check if formula already exists
+	for _, existingContract := range doc.Contracts {
+		if existingContract.Formula == ct.Formula {
+			s.logger.Info("Formula already exists for this service, skipping",
+				zap.String("service", ct.Service),
+				zap.String("formula", ct.Formula))
+			return nil
+		}
+	}
+
+	// Add new contract
+	doc.Contracts = append(doc.Contracts, ct)
+
+	// Save back to Redis
+	updatedData, err := json.Marshal(doc)
+	if err != nil {
+		return fmt.Errorf("failed to marshal contracts: %w", err)
+	}
+
+	err = s.client.Set(ctx, key, updatedData, 0).Err() // No expiration for contracts
+	if err != nil {
+		return fmt.Errorf("failed to save contracts: %w", err)
+	}
+
+	// Index by processor for efficient lookup
+	processorKey := fmt.Sprintf("processor_contracts:%s", ct.Processor)
+	err = s.client.SAdd(ctx, processorKey, ct.Service).Err()
+	if err != nil {
+		s.logger.Error("Failed to add processor index", zap.Error(err))
+	}
+
+	s.logger.Info("Formula created successfully",
+		zap.String("service", ct.Service),
+		zap.String("formula", ct.Formula))
+
+	return nil
+}
+
+// Update updates an existing contract
+func (s *redisContractStore) Update(ctx context.Context, old calculation.Contract, new calculation.Contract) error {
+	// If service names are different, handle as delete + create
+	if old.Service != new.Service {
+		if err := s.DeleteFormula(ctx, old); err != nil {
+			return err
+		}
+		return s.Create(ctx, new)
+	}
+
+	key := fmt.Sprintf("contracts:%s", old.Service)
+
+	// Get existing document
+	data, err := s.client.Get(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return fmt.Errorf("service not found")
+		}
+		return fmt.Errorf("failed to get contracts: %w", err)
+	}
+
+	var doc contract.Document
+	if err := json.Unmarshal([]byte(data), &doc); err != nil {
+		return fmt.Errorf("failed to unmarshal contracts: %w", err)
+	}
+
+	// Find and update the contract
+	found := false
+	for i, existingContract := range doc.Contracts {
+		if existingContract.Formula == old.Formula {
+			doc.Contracts[i] = new
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("old formula not found")
+	}
+
+	// Save back to Redis
+	updatedData, err := json.Marshal(doc)
+	if err != nil {
+		return fmt.Errorf("failed to marshal contracts: %w", err)
+	}
+
+	err = s.client.Set(ctx, key, updatedData, 0).Err()
+	if err != nil {
+		return fmt.Errorf("failed to save contracts: %w", err)
+	}
+
+	s.logger.Info("Formula updated successfully",
+		zap.String("service", old.Service),
+		zap.String("oldFormula", old.Formula),
+		zap.String("newFormula", new.Formula))
+
+	return nil
+}
+
+// DeleteFormula deletes a specific formula from a service's contracts
+func (s *redisContractStore) DeleteFormula(ctx context.Context, ct calculation.Contract) error {
+	key := fmt.Sprintf("contracts:%s", ct.Service)
+
+	// Get existing document
+	data, err := s.client.Get(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return fmt.Errorf("service not found")
+		}
+		return fmt.Errorf("failed to get contracts: %w", err)
+	}
+
+	var doc contract.Document
+	if err := json.Unmarshal([]byte(data), &doc); err != nil {
+		return fmt.Errorf("failed to unmarshal contracts: %w", err)
+	}
+
+	// Find and remove the contract
+	found := false
+	newContracts := make([]calculation.Contract, 0, len(doc.Contracts))
+	for _, existingContract := range doc.Contracts {
+		if existingContract.Formula != ct.Formula {
+			newContracts = append(newContracts, existingContract)
+		} else {
+			found = true
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("formula not found")
+	}
+
+	// If no contracts left, delete the document entirely
+	if len(newContracts) == 0 {
+		err = s.client.Del(ctx, key).Err()
+		if err != nil {
+			return fmt.Errorf("failed to delete empty contract document: %w", err)
+		}
+
+		// Clean up processor index
+		processorKey := fmt.Sprintf("processor_contracts:%s", ct.Processor)
+		s.client.SRem(ctx, processorKey, ct.Service)
+
+		s.logger.Info("No contracts left for service, removing document",
+			zap.String("service", ct.Service))
+	} else {
+		// Update document with remaining contracts
+		doc.Contracts = newContracts
+		updatedData, err := json.Marshal(doc)
+		if err != nil {
+			return fmt.Errorf("failed to marshal contracts: %w", err)
+		}
+
+		err = s.client.Set(ctx, key, updatedData, 0).Err()
+		if err != nil {
+			return fmt.Errorf("failed to save contracts: %w", err)
+		}
+	}
+
+	s.logger.Info("Formula deleted successfully",
+		zap.String("service", ct.Service),
+		zap.String("formula", ct.Formula))
+
+	return nil
+}
+
+// DeleteContract deletes all contracts for a service
+func (s *redisContractStore) DeleteContract(ctx context.Context, service string) error {
+	key := fmt.Sprintf("contracts:%s", service)
+
+	// Delete the contract document
+	result, err := s.client.Del(ctx, key).Result()
+	if err != nil {
+		return fmt.Errorf("failed to delete contracts: %w", err)
+	}
+
+	if result == 0 {
+		return fmt.Errorf("service not found")
+	}
+
+	// Clean up processor indexes - scan for all processor keys
+	iter := s.client.Scan(ctx, 0, "processor_contracts:*", 0).Iterator()
+	for iter.Next(ctx) {
+		processorKey := iter.Val()
+		s.client.SRem(ctx, processorKey, service)
+	}
+
+	if err := iter.Err(); err != nil {
+		s.logger.Error("Failed to clean up processor indexes", zap.Error(err))
+	}
+
+	s.logger.Info("Contract deleted successfully", zap.String("service", service))
+	return nil
+}
+
+// GetContractsForProcessor retrieves all contracts for a specific processor
+func (s *redisContractStore) GetContractsForProcessor(ctx context.Context, processor string) ([]contract.Document, error) {
+	// Get all services for this processor
+	processorKey := fmt.Sprintf("processor_contracts:%s", processor)
+	services, err := s.client.SMembers(ctx, processorKey).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return []contract.Document{}, nil
+		}
+		return nil, fmt.Errorf("failed to get processor services: %w", err)
+	}
+
+	var result []contract.Document
+
+	// Get contracts for each service and filter by processor
+	for _, service := range services {
+		key := fmt.Sprintf("contracts:%s", service)
+		data, err := s.client.Get(ctx, key).Result()
+		if err != nil {
+			if err == redis.Nil {
+				// Service was deleted, clean up index
+				s.client.SRem(ctx, processorKey, service)
+				continue
+			}
+			s.logger.Error("Failed to get contracts for service",
+				zap.String("service", service), zap.Error(err))
+			continue
+		}
+
+		var doc contract.Document
+		if err := json.Unmarshal([]byte(data), &doc); err != nil {
+			s.logger.Error("Failed to unmarshal contracts",
+				zap.String("service", service), zap.Error(err))
+			continue
+		}
+
+		// Filter contracts by processor
+		filteredContracts := make([]calculation.Contract, 0)
+		for _, ct := range doc.Contracts {
+			if ct.Processor == processor {
+				filteredContracts = append(filteredContracts, ct)
+			}
+		}
+
+		// Only add document if it has contracts for this processor
+		if len(filteredContracts) > 0 {
+			doc.Contracts = filteredContracts
+			result = append(result, doc)
+		}
+	}
+
+	return result, nil
 }

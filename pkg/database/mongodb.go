@@ -2,9 +2,12 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/smnzlnsk/opentelemetry-components/pkg/calculation"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/contract"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -13,11 +16,12 @@ import (
 
 // MongoDBClient represents a MongoDB client with connection to a specific database
 type MongoDBClient struct {
-	client       *mongo.Client
-	database     *mongo.Database
-	logger       *zap.Logger
-	config       *MongoDBConfig
-	metricsStore MetricsStore
+	client        *mongo.Client
+	database      *mongo.Database
+	logger        *zap.Logger
+	config        *MongoDBConfig
+	metricsStore  MetricsStore
+	contractStore ContractStore
 }
 
 // MongoDBConfig represents MongoDB configuration
@@ -71,6 +75,7 @@ func (c *MongoDBClient) Connect(ctx context.Context) error {
 	c.client = client
 	c.database = database
 	c.metricsStore = NewMongoMetricsStore(database.Collection("metrics"), c.logger)
+	c.contractStore = NewMongoContractStore(database.Collection("contracts"), c.logger)
 
 	c.logger.Info("Connected to MongoDB",
 		zap.String("host", c.config.Host),
@@ -91,6 +96,11 @@ func (c *MongoDBClient) Health(ctx context.Context) error {
 // GetMetricsStore returns the metrics store
 func (c *MongoDBClient) GetMetricsStore() MetricsStore {
 	return c.metricsStore
+}
+
+// GetContractStore returns the contract store
+func (c *MongoDBClient) GetContractStore() ContractStore {
+	return c.contractStore
 }
 
 // GetDatabase returns the MongoDB database
@@ -281,4 +291,243 @@ func (s *mongoMetricsStore) buildMetricID(name string, state string, age int) st
 
 func (s *mongoMetricsStore) calculateAge(length int, index int) int {
 	return (length - 1) - index
+}
+
+// mongoContractStore implements the ContractStore interface for MongoDB
+type mongoContractStore struct {
+	collection *mongo.Collection
+	logger     *zap.Logger
+}
+
+// Ensure mongoContractStore implements the ContractStore interface
+var _ ContractStore = (*mongoContractStore)(nil)
+
+// NewMongoContractStore creates a new MongoDB contract store
+func NewMongoContractStore(collection *mongo.Collection, logger *zap.Logger) ContractStore {
+	return &mongoContractStore{
+		collection: collection,
+		logger:     logger,
+	}
+}
+
+// Create creates a new contract for a service
+func (s *mongoContractStore) Create(ctx context.Context, ct calculation.Contract) error {
+	// Create a filter to find the service document
+	filter := bson.M{"service": ct.Service}
+
+	// Update options to create a new document if it doesn't exist
+	upsert := true
+	updateOptions := options.UpdateOptions{
+		Upsert: &upsert,
+	}
+
+	// Check if formula already exists in the document
+	var existingDoc contract.Document
+	err := s.collection.FindOne(ctx, filter).Decode(&existingDoc)
+
+	// If document exists, check if formula is already in the array
+	if err == nil {
+		for _, existingContract := range existingDoc.Contracts {
+			if existingContract.Formula == ct.Formula {
+				s.logger.Info("Formula already exists for this service, skipping",
+					zap.String("service", ct.Service),
+					zap.String("formula", ct.Formula))
+				return nil
+			}
+		}
+	} else if err != mongo.ErrNoDocuments {
+		// If an error occurred that is not "document not found"
+		return err
+	}
+
+	// Add formula to the array using $addToSet (to avoid duplicates)
+	update := bson.M{
+		"$addToSet": bson.M{
+			"contracts": ct,
+		},
+	}
+
+	_, err = s.collection.UpdateOne(ctx, filter, update, &updateOptions)
+	if err != nil {
+		return err
+	}
+
+	s.logger.Info("Formula created successfully",
+		zap.String("service", ct.Service),
+		zap.String("formula", ct.Formula))
+
+	return nil
+}
+
+// Update updates an existing contract
+func (s *mongoContractStore) Update(ctx context.Context, old calculation.Contract, new calculation.Contract) error {
+	// If service names are different, we need to handle this as a delete from one service and add to another
+	if old.Service != new.Service {
+		// First remove from the old service
+		if err := s.DeleteFormula(ctx, old); err != nil {
+			return err
+		}
+		// Then add to the new service
+		return s.Create(ctx, new)
+	}
+
+	// For same service, find the document
+	filter := bson.M{"service": old.Service}
+
+	// First check if the document exists
+	var existingDoc contract.Document
+	err := s.collection.FindOne(ctx, filter).Decode(&existingDoc)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return errors.New("service not found")
+		}
+		return err
+	}
+
+	// Check if the old formula exists
+	formulaExists := false
+	for _, existingContract := range existingDoc.Contracts {
+		if existingContract.Formula == old.Formula {
+			formulaExists = true
+			break
+		}
+	}
+
+	if !formulaExists {
+		return errors.New("old formula not found")
+	}
+
+	// Remove the old formula
+	update := bson.M{
+		"$pull": bson.M{
+			"contracts": bson.M{"formula": old.Formula},
+		},
+	}
+
+	_, err = s.collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+
+	// Add the new formula
+	update = bson.M{
+		"$addToSet": bson.M{
+			"contracts": new,
+		},
+	}
+
+	_, err = s.collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+
+	s.logger.Info("Formula updated successfully",
+		zap.String("service", old.Service),
+		zap.String("oldFormula", old.Formula),
+		zap.String("newFormula", new.Formula))
+
+	return nil
+}
+
+// DeleteFormula deletes a specific formula from a service's contracts
+func (s *mongoContractStore) DeleteFormula(ctx context.Context, ct calculation.Contract) error {
+	// Create filter to find the service
+	filter := bson.M{"service": ct.Service}
+
+	// Remove the specific formula from the array
+	update := bson.M{
+		"$pull": bson.M{
+			"contracts": bson.M{"formula": ct.Formula},
+		},
+	}
+
+	result, err := s.collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+
+	if result.MatchedCount == 0 {
+		return errors.New("service not found")
+	}
+
+	// Check if the formulas array is now empty, if so, consider removing the document
+	var doc contract.Document
+	err = s.collection.FindOne(ctx, filter).Decode(&doc)
+	if err != nil {
+		return err
+	}
+
+	if len(doc.Contracts) == 0 {
+		s.logger.Info("No contracts left for service, removing document",
+			zap.String("service", ct.Service))
+		_, err = s.collection.DeleteOne(ctx, filter)
+		if err != nil {
+			return err
+		}
+	}
+
+	s.logger.Info("Formula deleted successfully",
+		zap.String("service", ct.Service),
+		zap.String("formula", ct.Formula))
+
+	return nil
+}
+
+// DeleteContract deletes all contracts for a service
+func (s *mongoContractStore) DeleteContract(ctx context.Context, service string) error {
+	// Create filter to find the service
+	filter := bson.M{"service": service}
+
+	// Delete the entire document
+	result, err := s.collection.DeleteOne(ctx, filter)
+	if err != nil {
+		return err
+	}
+
+	if result.DeletedCount == 0 {
+		return errors.New("service not found")
+	}
+
+	s.logger.Info("Contract deleted successfully",
+		zap.String("service", service))
+
+	return nil
+}
+
+// GetContractsForProcessor retrieves all contracts for a specific processor
+func (s *mongoContractStore) GetContractsForProcessor(ctx context.Context, processor string) ([]contract.Document, error) {
+	// Create a projection to filter contracts by processor
+	projection := bson.D{
+		{Key: "$project", Value: bson.D{
+			{Key: "service", Value: 1},
+			{Key: "contracts", Value: bson.D{
+				{Key: "$filter", Value: bson.D{
+					{Key: "input", Value: "$contracts"},
+					{Key: "as", Value: "contract"},
+					{Key: "cond", Value: bson.D{
+						{Key: "$eq", Value: bson.A{"$$contract.processor", processor}},
+					}},
+				}},
+			}},
+		}},
+	}
+
+	// Execute the aggregation directly with the projection
+	cursor, err := s.collection.Aggregate(ctx, mongo.Pipeline{projection})
+	if err != nil {
+		s.logger.Error("Failed to execute aggregation for processor",
+			zap.String("processor", processor),
+			zap.Error(err))
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	// Decode the results
+	var result []contract.Document
+	if err := cursor.All(ctx, &result); err != nil {
+		s.logger.Error("Failed to decode contracts", zap.Error(err))
+		return nil, err
+	}
+
+	return result, nil
 }

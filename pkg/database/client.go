@@ -2,6 +2,9 @@ package database
 
 import (
 	"context"
+
+	"github.com/smnzlnsk/opentelemetry-components/pkg/calculation"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/contract"
 )
 
 // Client is the high-level interface that abstracts away specific database implementations
@@ -17,6 +20,9 @@ type Client interface {
 
 	// GetMetricsStore returns a metrics-specific store interface
 	GetMetricsStore() MetricsStore
+
+	// GetContractStore returns a contract-specific store interface
+	GetContractStore() ContractStore
 }
 
 // MetricsStore provides database operations specifically for metrics
@@ -35,4 +41,22 @@ type MetricsStore interface {
 
 	// DeleteExpiredMetrics deletes metrics older than the specified duration
 	DeleteExpiredMetrics(ctx context.Context, maxAge int64) error
+}
+
+// ContractStore provides database operations specifically for contracts
+type ContractStore interface {
+	// Create creates a new contract for a service
+	Create(ctx context.Context, contract calculation.Contract) error
+
+	// Update updates an existing contract
+	Update(ctx context.Context, old calculation.Contract, new calculation.Contract) error
+
+	// DeleteFormula deletes a specific formula from a service's contracts
+	DeleteFormula(ctx context.Context, contract calculation.Contract) error
+
+	// DeleteContract deletes all contracts for a service
+	DeleteContract(ctx context.Context, service string) error
+
+	// GetContractsForProcessor retrieves all contracts for a specific processor
+	GetContractsForProcessor(ctx context.Context, processor string) ([]contract.Document, error)
 }
