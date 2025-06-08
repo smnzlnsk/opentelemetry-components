@@ -9,8 +9,8 @@ import (
 
 // DatabaseConfig holds configuration for any database type
 type DatabaseConfig struct {
-	MongoDB *MongoDBConfig `yaml:"mongodb,omitempty"`
-	Redis   *RedisConfig   `yaml:"redis,omitempty"`
+	MongoDB *MongoDBConfig `mapstructure:"mongodb"`
+	Redis   *RedisConfig   `mapstructure:"redis"`
 }
 
 // ClientFactory creates database clients based on configuration
