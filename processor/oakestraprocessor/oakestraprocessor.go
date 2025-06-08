@@ -25,14 +25,16 @@ type MultiProcessor struct {
 	logger           *zap.Logger
 	cancel           context.CancelFunc
 	grpcServer       Server
-	mongodbClient    *database.MongoDBClient
+	dbClient         database.Client
 	config           *Config
 	services         domain.Services
 	datapointManager domain.DatapointManager
 }
 
 func newMultiProcessor(ctx context.Context, set processor.Settings, cfg *Config, next consumer.Metrics) *MultiProcessor {
-	dbClient, err := database.NewMongoDBClient(&cfg.MongoDB, set.Logger)
+	// Initialize database client using the abstraction
+	factory := database.NewClientFactory(set.Logger)
+	dbClient, err := factory.CreateAndConnect(ctx, &cfg.Database)
 	if err != nil {
 		set.Logger.Error(err.Error())
 		return nil
@@ -55,7 +57,7 @@ func newMultiProcessor(ctx context.Context, set processor.Settings, cfg *Config,
 		logger:           set.Logger,
 		config:           cfg,
 		services:         services,
-		mongodbClient:    dbClient,
+		dbClient:         dbClient,
 		datapointManager: datapointManager,
 	}
 
@@ -140,10 +142,10 @@ func (p *MultiProcessor) Shutdown(ctx context.Context) error {
 		p.grpcServer.Stop()
 	}
 
-	// Close MongoDB client
-	if p.mongodbClient != nil {
-		if err := p.mongodbClient.Close(ctx); err != nil {
-			return fmt.Errorf("failed to close MongoDB client: %w", err)
+	// Close database client
+	if p.dbClient != nil {
+		if err := p.dbClient.Close(ctx); err != nil {
+			return fmt.Errorf("failed to close database client: %w", err)
 		}
 	}
 

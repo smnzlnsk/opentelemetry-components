@@ -26,9 +26,9 @@ type heuristicEngineProcessor struct {
 	nextConsumer consumer.Metrics
 	logger       *zap.Logger
 
-	// database client
-	mongodbClient *database.MongoDBClient
-	repositories  *repository.Repositories
+	// database client (abstracted)
+	dbClient     database.Client
+	repositories *repository.Repositories
 
 	// services
 	services domain.Services
@@ -55,9 +55,9 @@ func newProcessor(config *Config, set processor.Settings, next consumer.Metrics)
 		availableEntities: []domain.HeuristicType{},
 
 		// created on Start
-		httpServer:    nil,
-		mongodbClient: nil,
-		repositories:  nil,
+		httpServer:   nil,
+		dbClient:     nil,
+		repositories: nil,
 	}, nil
 }
 
@@ -72,17 +72,18 @@ func (p *heuristicEngineProcessor) Capabilities() consumer.Capabilities {
 
 func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) error {
 	// initialize csv logger
-	if err := logger.InitCSVLogger("/metrics/heuristic_notifications.csv"); err != nil {
+	if err := logger.InitCSVLogger("heuristic_notifications.csv"); err != nil {
 		return err
 	}
 
-	// initialize mongodb client
-	dbClient, err := database.NewMongoDBClient(&p.config.MongoDB, p.logger)
+	// initialize database client using the abstraction
+	factory := database.NewClientFactory(p.logger)
+	dbClient, err := factory.CreateAndConnect(context.Background(), &p.config.Database)
 	if err != nil {
 		return err
 	}
 
-	p.mongodbClient = dbClient
+	p.dbClient = dbClient
 	p.repositories = repository.NewRepositories(dbClient, p.logger)
 
 	// initialize services
@@ -187,11 +188,11 @@ func (p *heuristicEngineProcessor) Shutdown(ctx context.Context) error {
 		}
 	}
 
-	// Close MongoDB client
-	if p.mongodbClient != nil {
-		if err := p.mongodbClient.Close(ctx); err != nil {
-			p.logger.Error("Failed to close MongoDB client", zap.Error(err))
-			shutdownErrs = append(shutdownErrs, fmt.Errorf("MongoDB client close: %w", err))
+	// Close database client
+	if p.dbClient != nil {
+		if err := p.dbClient.Close(ctx); err != nil {
+			p.logger.Error("Failed to close database client", zap.Error(err))
+			shutdownErrs = append(shutdownErrs, fmt.Errorf("database client close: %w", err))
 		}
 	}
 

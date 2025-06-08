@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/smnzlnsk/opentelemetry-components/pkg/config"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/database"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap"
 )
@@ -13,7 +14,7 @@ type Config struct {
 	// Add your configuration fields here
 	HTTPServer config.HTTPServerConfig `mapstructure:"http_server"`
 	//NotificationInterfaces config.InterfacesConfig     `mapstructure:"interfaces"`
-	MongoDB        config.MongoDBConfig        `mapstructure:"mongodb"`
+	Database       database.DatabaseConfig     `mapstructure:"database"`
 	ServiceManager config.ServiceManagerConfig `mapstructure:"service_manager"`
 }
 
@@ -38,12 +39,31 @@ func (cfg *Config) Validate() error {
 		}
 	}
 
-	if cfg.MongoDB.Host == "" {
-		return errors.New("mongodb.host is required")
+	// Validate database configuration
+	if cfg.Database.MongoDB == nil && cfg.Database.Redis == nil {
+		return errors.New("database configuration is required - either 'mongodb' or 'redis' must be specified")
 	}
 
-	if cfg.MongoDB.Port <= 0 || cfg.MongoDB.Port > 65535 {
-		return errors.New("mongodb.port must be between 1 and 65535")
+	if cfg.Database.MongoDB != nil && cfg.Database.Redis != nil {
+		return errors.New("only one database configuration can be specified - either 'mongodb' or 'redis', not both")
+	}
+
+	if cfg.Database.MongoDB != nil {
+		if cfg.Database.MongoDB.Host == "" {
+			return errors.New("database.mongodb.host is required")
+		}
+		if cfg.Database.MongoDB.Port <= 0 || cfg.Database.MongoDB.Port > 65535 {
+			return errors.New("database.mongodb.port must be between 1 and 65535")
+		}
+	}
+
+	if cfg.Database.Redis != nil {
+		if cfg.Database.Redis.Host == "" {
+			return errors.New("database.redis.host is required")
+		}
+		if cfg.Database.Redis.Port <= 0 || cfg.Database.Redis.Port > 65535 {
+			return errors.New("database.redis.port must be between 1 and 65535")
+		}
 	}
 
 	return nil

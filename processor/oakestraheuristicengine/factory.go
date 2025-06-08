@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/smnzlnsk/opentelemetry-components/pkg/config"
+	"github.com/smnzlnsk/opentelemetry-components/pkg/database"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/metadata"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
@@ -26,12 +27,7 @@ func createDefaultConfig() component.Config {
 			Port:    8080,
 			Host:    "0.0.0.0",
 		},
-		MongoDB: config.MongoDBConfig{
-			Host:     "localhost",
-			Port:     27017,
-			User:     "",
-			Password: "",
-		},
+		Database: database.DatabaseConfig{},
 	}
 }
 

@@ -199,7 +199,6 @@ func (r *routingEntity) Evaluate(arguments ...interface{}) error {
 		if conditionalResult {
 			notification := result
 			notification.Values = nil
-			fmt.Println("sending notification", notification, capability)
 			notificationInterface.Notify(notification)
 			break
 		}

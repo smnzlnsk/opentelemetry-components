@@ -10,8 +10,8 @@ type Repositories struct {
 	MetricsRepository domain.MetricsRepository
 }
 
-func NewRepositories(client *database.MongoDBClient, logger *zap.Logger) *Repositories {
+func NewRepositories(client database.Client, logger *zap.Logger) *Repositories {
 	return &Repositories{
-		MetricsRepository: NewMetricsRepository(client.GetDatabase().Collection("metrics"), logger),
+		MetricsRepository: NewMetricsRepository(client.GetMetricsStore(), logger),
 	}
 }
