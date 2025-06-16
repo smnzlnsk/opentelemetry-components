@@ -11,8 +11,7 @@ import (
 // Config defines the configuration for the oakestraheuristicengine processor.
 type Config struct {
 	// Add your configuration fields here
-	HTTPServer config.HTTPServerConfig `mapstructure:"http_server"`
-	//NotificationInterfaces config.InterfacesConfig     `mapstructure:"interfaces"`
+	HTTPServer     config.HTTPServerConfig     `mapstructure:"http_server"`
 	MongoDB        config.MongoDBConfig        `mapstructure:"mongodb"`
 	ServiceManager config.ServiceManagerConfig `mapstructure:"service_manager"`
 }
@@ -22,10 +21,6 @@ var _ confmap.Unmarshaler = (*Config)(nil)
 
 // Validate checks if the processor configuration is valid
 func (cfg *Config) Validate() error {
-	/*if len(cfg.NotificationInterfaces) == 0 {
-		return errors.New("must provide at least one notification interface")
-	}*/
-
 	// Validate HTTP server configuration if enabled
 	if cfg.HTTPServer.Enabled {
 		if cfg.HTTPServer.Port <= 0 || cfg.HTTPServer.Port > 65535 {
@@ -38,6 +33,7 @@ func (cfg *Config) Validate() error {
 		}
 	}
 
+	// Validate MongoDB configuration
 	if cfg.MongoDB.Host == "" {
 		return errors.New("mongodb.host is required")
 	}

@@ -72,7 +72,7 @@ func (p *heuristicEngineProcessor) Capabilities() consumer.Capabilities {
 
 func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) error {
 	// initialize csv logger
-	if err := logger.InitCSVLogger("/metrics/heuristic_notifications.csv"); err != nil {
+	if err := logger.InitCSVLogger("heuristic_notifications.csv"); err != nil {
 		return err
 	}
 
@@ -87,6 +87,15 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 
 	// initialize services
 	p.services = service.NewServices(p.repositories, p.logger)
+
+	// initialize indexes
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := p.services.GetMetricsService().EnsureIndexes(ctx); err != nil {
+			p.logger.Error("Failed to create database indexes", zap.Error(err))
+		}
+	}()
 
 	for _, entity := range p.activeEntities {
 		if err := entity.Start(); err != nil {
