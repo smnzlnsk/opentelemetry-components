@@ -3,6 +3,7 @@ package oakestraprocessor // import github.com/smnzlnsk/opentelemetry-components
 import (
 	"context"
 	"fmt"
+	"time"
 
 	pb "github.com/smnzlnsk/monitoring-proto-lib/gen/go/monitoring_proto_lib/monitoring/v1"
 	"github.com/smnzlnsk/opentelemetry-components/pkg/database"
@@ -41,7 +42,7 @@ func newMultiProcessor(ctx context.Context, set processor.Settings, cfg *Config,
 
 	services := service.NewServices(repositories, set.Logger)
 
-	datapointManager := domain.NewDatapointManager(services.GetMetricsService())
+	datapointManager := domain.NewDatapointManager(set.Logger, services.GetMetricsService())
 
 	p, err := createProcessors(ctx, set, cfg, processorFactories, services, datapointManager)
 	if err != nil {
@@ -61,6 +62,15 @@ func newMultiProcessor(ctx context.Context, set processor.Settings, cfg *Config,
 
 	// Initialize gRPC server
 	proc.grpcServer = NewGRPCServer(proc, cfg.GRPCPort)
+
+	// Ensure database indexes are created for optimal performance
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := services.GetMetricsService().EnsureIndexes(ctx); err != nil {
+			set.Logger.Error("Failed to create database indexes", zap.Error(err))
+		}
+	}()
 
 	return proc
 }
@@ -140,6 +150,11 @@ func (p *MultiProcessor) Shutdown(ctx context.Context) error {
 		p.grpcServer.Stop()
 	}
 
+	// Shutdown datapoint manager to flush any remaining buffered data
+	if p.datapointManager != nil {
+		p.datapointManager.Shutdown()
+	}
+
 	// Close MongoDB client
 	if p.mongodbClient != nil {
 		if err := p.mongodbClient.Close(ctx); err != nil {
@@ -158,10 +173,10 @@ func (p *MultiProcessor) Capabilities() consumer.Capabilities {
 }
 
 func (p *MultiProcessor) ConsumeMetrics(ctx context.Context, metrics pmetric.Metrics) error {
-	err := p.datapointManager.SaveMetrics(metrics)
+	/*err := p.datapointManager.SaveMetrics(metrics)
 	if err != nil {
 		p.logger.Error("failed to save metrics to datapoint manager", zap.Error(err))
-	}
+	}*/
 
 	for _, subp := range p.processors {
 		err := subp.ProcessMetrics(metrics)
@@ -171,9 +186,9 @@ func (p *MultiProcessor) ConsumeMetrics(ctx context.Context, metrics pmetric.Met
 		}
 	}
 
-	err = p.datapointManager.SaveCalculationResults(metrics)
+	err := p.datapointManager.SaveMetrics(metrics)
 	if err != nil {
-		p.logger.Error("failed to save calculation results to datapoint manager", zap.Error(err))
+		p.logger.Error("failed to save metrics to datapoint manager", zap.Error(err))
 	}
 
 	return p.next.ConsumeMetrics(ctx, metrics)

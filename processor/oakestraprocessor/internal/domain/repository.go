@@ -11,6 +11,9 @@ import (
 type MetricsRepository interface {
 	SaveMetrics(ctx context.Context, dbHostMetrics database.HostMetrics) error
 	GetJobMetrics(ctx context.Context, jobName string) (database.HostMetrics, error)
+	GetJobMetricsBatch(ctx context.Context, jobNames []string) (map[string]database.HostMetrics, error)
+	SaveMetricsBatch(ctx context.Context, hostMetricsList []database.HostMetrics) error
+	EnsureIndexes(ctx context.Context) error
 }
 
 type ContractRepository interface {

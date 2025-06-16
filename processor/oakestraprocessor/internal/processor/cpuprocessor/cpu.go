@@ -47,17 +47,27 @@ func (c *CPUMetricProcessor) processMetrics(_ pmetric.Metrics) (pmetric.Metrics,
 	results := c.contracts.Evaluate()
 
 	for key, value := range results {
-		rb := c.mb.NewResourceBuilder()
-		rb.SetServiceName(key.Service)
-		rb.SetContainerID(key.Service)
 		c.mb.RecordServiceCPUUtilisationDataPoint(
 			pcommon.NewTimestampFromTime(time.Now()),
 			value,
 			metadata.MapAttributeState[key.State],
 		)
+	}
+
+	if len(results) > 0 {
+
+		var serviceName string
+		for key := range results {
+			serviceName = key.Service
+			break
+		}
+
+		rb := c.mb.NewResourceBuilder()
+		rb.SetServiceName(serviceName)
+		rb.SetContainerID(serviceName)
 
 		// set resources
-		c.mb.EmitForResource(metadata.WithResource(rb.Emit()))
+		return c.mb.Emit(metadata.WithResource(rb.Emit())), nil
 	}
 	return c.mb.Emit(), nil
 }

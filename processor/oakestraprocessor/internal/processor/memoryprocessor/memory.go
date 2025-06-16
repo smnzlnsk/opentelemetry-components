@@ -47,17 +47,26 @@ func (c *MemoryMetricProcessor) processMetrics(_ pmetric.Metrics) (pmetric.Metri
 	results := c.contracts.Evaluate()
 
 	for key, value := range results {
-		rb := c.mb.NewResourceBuilder()
-		rb.SetServiceName(key.Service)
-		rb.SetContainerID(key.Service)
 		c.mb.RecordServiceMemoryUtilisationDataPoint(
 			pcommon.NewTimestampFromTime(time.Now()),
 			value,
 			metadata.MapAttributeState[key.State],
 		)
+	}
 
-		// set resources
-		c.mb.EmitForResource(metadata.WithResource(rb.Emit()))
+	if len(results) > 0 {
+
+		var serviceName string
+		for key := range results {
+			serviceName = key.Service
+			break
+		}
+
+		rb := c.mb.NewResourceBuilder()
+		rb.SetServiceName(serviceName)
+		rb.SetContainerID(serviceName)
+
+		return c.mb.Emit(metadata.WithResource(rb.Emit())), nil
 	}
 	return c.mb.Emit(), nil
 }

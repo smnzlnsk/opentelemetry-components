@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/smnzlnsk/opentelemetry-components/pkg/database"
@@ -12,6 +13,7 @@ import (
 	datapoint "github.com/smnzlnsk/opentelemetry-components/pkg/metric/datapoint"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.uber.org/zap"
 )
 
 type DatapointManager interface {
@@ -22,6 +24,7 @@ type DatapointManager interface {
 	GetDatapoints() map[datapoint.Key]map[int]datapoint.Datapoint
 	GetCurrentIndex(key datapoint.Key) int
 	SaveCalculationResults(metrics pmetric.Metrics) error
+	Shutdown()
 }
 
 // datapointManager is a simple implementation of the DatapointManager interface
@@ -30,14 +33,110 @@ type datapointManager struct {
 	Datapoints     map[datapoint.Key]map[int]datapoint.Datapoint
 	indexTracker   map[datapoint.Key]int
 	metricsService MetricsService
+
+	// Buffering for async processing
+	buffer        []database.HostMetrics
+	bufferMutex   sync.Mutex
+	bufferSize    int
+	flushInterval time.Duration
+	stopChan      chan struct{}
+	logger        *zap.Logger
 }
 
-func NewDatapointManager(metricsService MetricsService) DatapointManager {
-	return &datapointManager{
+func NewDatapointManager(logger *zap.Logger, metricsService MetricsService) DatapointManager {
+	dm := &datapointManager{
 		Datapoints:     make(map[datapoint.Key]map[int]datapoint.Datapoint),
 		indexTracker:   make(map[datapoint.Key]int),
 		metricsService: metricsService,
+		buffer:         make([]database.HostMetrics, 0),
+		bufferSize:     100,
+		flushInterval:  1 * time.Second,
+		stopChan:       make(chan struct{}),
+		logger:         logger,
 	}
+
+	// Start background flusher
+	go dm.backgroundFlusher()
+
+	return dm
+}
+
+// backgroundFlusher periodically flushes buffered metrics to database
+func (d *datapointManager) backgroundFlusher() {
+	ticker := time.NewTicker(d.flushInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			d.flushBuffer()
+		case <-d.stopChan:
+			// Final flush before stopping
+			d.flushBuffer()
+			return
+		}
+	}
+}
+
+// flushBuffer writes all buffered metrics to database
+func (d *datapointManager) flushBuffer() {
+	d.bufferMutex.Lock()
+	defer d.bufferMutex.Unlock()
+
+	if len(d.buffer) == 0 {
+		return
+	}
+
+	// Create a copy and clear the buffer
+	metricsToSave := make([]database.HostMetrics, len(d.buffer))
+	copy(metricsToSave, d.buffer)
+	d.buffer = d.buffer[:0] // Clear buffer
+
+	// Save to database asynchronously
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		// Use batch save if available, otherwise fall back to individual saves
+		if batchSaver, ok := d.metricsService.(interface {
+			SaveMetricsBatch(ctx context.Context, metrics []database.HostMetrics) error
+		}); ok {
+			if err := batchSaver.SaveMetricsBatch(ctx, metricsToSave); err != nil {
+				if d.logger != nil {
+					d.logger.Error("Failed to batch save metrics", zap.Error(err))
+				}
+			}
+		} else {
+			// Fallback to individual saves
+			for _, metrics := range metricsToSave {
+				if err := d.metricsService.SaveMetrics(ctx, metrics); err != nil {
+					if d.logger != nil {
+						d.logger.Error("Failed to save metrics", zap.Error(err))
+					}
+				}
+			}
+		}
+	}()
+}
+
+// addToBuffer adds metrics to buffer and flushes if needed
+func (d *datapointManager) addToBuffer(metrics database.HostMetrics) {
+	d.bufferMutex.Lock()
+	defer d.bufferMutex.Unlock()
+
+	d.buffer = append(d.buffer, metrics)
+
+	// Flush if buffer is full
+	if len(d.buffer) >= d.bufferSize {
+		go d.flushBuffer() // Async flush to avoid blocking
+	}
+}
+
+// Shutdown gracefully shuts down the datapoint manager
+func (d *datapointManager) Shutdown() {
+	close(d.stopChan)
+	// Give some time for final flush
+	time.Sleep(100 * time.Millisecond)
 }
 
 // String returns a string representation of the DatapointManager state
@@ -154,11 +253,8 @@ func (d *datapointManager) SaveCalculationResults(metrics pmetric.Metrics) error
 		dbMetrics.ServiceInstanceMetrics = append(dbMetrics.ServiceInstanceMetrics, *serviceMetrics)
 	}
 
-	// Save metrics to database
-	err := d.metricsService.SaveMetrics(context.Background(), dbMetrics)
-	if err != nil {
-		return fmt.Errorf("failed to save metrics to database: %w", err)
-	}
+	// Add metrics to buffer for async processing
+	d.addToBuffer(dbMetrics)
 
 	return nil
 }
@@ -291,10 +387,77 @@ func (d *datapointManager) SaveMetrics(metrics pmetric.Metrics) error {
 		dbMetrics.ServiceInstanceMetrics = append(dbMetrics.ServiceInstanceMetrics, *serviceMetrics)
 	}
 
-	// Save metrics to database
-	err := d.metricsService.SaveMetrics(context.Background(), dbMetrics)
-	if err != nil {
-		return fmt.Errorf("failed to save metrics to database: %w", err)
+	// Add metrics to buffer for async processing
+	d.addToBuffer(dbMetrics)
+
+	// Publish to metrics broker for direct processor communication
+	// Group metrics by job name for publishing
+	jobMetrics := make(map[string]database.HostMetrics)
+
+	d.logger.Info("Processing metrics for broker publishing",
+		zap.String("host", dbMetrics.Host),
+		zap.Int("total_service_instances", len(dbMetrics.ServiceInstanceMetrics)),
+		zap.Int("total_system_metrics", len(dbMetrics.SystemMetrics)))
+
+	for _, serviceInstance := range dbMetrics.ServiceInstanceMetrics {
+		jobName := serviceInstance.JobName
+		d.logger.Info("Processing service instance for broker",
+			zap.String("job_name", jobName),
+			zap.Int("instance_number", serviceInstance.InstanceNumber),
+			zap.Int("metrics_count", len(serviceInstance.Metrics)))
+
+		if _, exists := jobMetrics[jobName]; !exists {
+			jobMetrics[jobName] = database.HostMetrics{
+				Host:                   dbMetrics.Host,
+				SystemMetrics:          dbMetrics.SystemMetrics, // Include system metrics for all jobs
+				ServiceInstanceMetrics: []database.ServiceInstanceMetrics{},
+			}
+		}
+
+		// Add this service instance to the job's metrics
+		jobMetrics[jobName] = database.HostMetrics{
+			Host:                   jobMetrics[jobName].Host,
+			SystemMetrics:          jobMetrics[jobName].SystemMetrics,
+			ServiceInstanceMetrics: append(jobMetrics[jobName].ServiceInstanceMetrics, serviceInstance),
+		}
+	}
+
+	// Publish each job's metrics to the broker
+	broker := database.GetGlobalMetricsBroker()
+
+	if d.logger != nil {
+		d.logger.Info("Publishing to broker",
+			zap.Int("total_jobs", len(jobMetrics)))
+
+		// Log all job names being published
+		jobNames := make([]string, 0, len(jobMetrics))
+		for jobName := range jobMetrics {
+			jobNames = append(jobNames, jobName)
+		}
+		d.logger.Info("Job names being published", zap.Strings("job_names", jobNames))
+	}
+
+	for jobName, metrics := range jobMetrics {
+		broker.PublishMetrics(jobName, metrics)
+		if d.logger != nil {
+			d.logger.Info("Published metrics to broker",
+				zap.String("job_name", jobName),
+				zap.Int("service_instances", len(metrics.ServiceInstanceMetrics)),
+				zap.Int("system_metrics", len(metrics.SystemMetrics)))
+		}
+
+		// Verify the metrics were actually stored in the broker
+		if verifyMetrics, exists := broker.GetMetrics(jobName); exists {
+			if d.logger != nil {
+				d.logger.Info("Verified metrics in broker",
+					zap.String("job_name", jobName),
+					zap.Int("verified_service_instances", len(verifyMetrics.ServiceInstanceMetrics)))
+			}
+		} else {
+			if d.logger != nil {
+				d.logger.Error("Failed to verify metrics in broker", zap.String("job_name", jobName))
+			}
+		}
 	}
 
 	return nil
