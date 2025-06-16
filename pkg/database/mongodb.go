@@ -8,6 +8,7 @@ import (
 	"github.com/smnzlnsk/opentelemetry-components/pkg/config"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/writeconcern"
 	"go.uber.org/zap"
 )
 
@@ -23,7 +24,7 @@ func NewMongoDBClient(cfg *config.MongoDBConfig, logger *zap.Logger) (*MongoDBCl
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Set up MongoDB client options
+	// Set up MongoDB client options with connection pooling optimizations
 	clientOptions := options.Client().ApplyURI(fmt.Sprintf("mongodb://%s:%d", cfg.Host, cfg.Port))
 
 	// Set authentication credentials if provided
@@ -33,6 +34,17 @@ func NewMongoDBClient(cfg *config.MongoDBConfig, logger *zap.Logger) (*MongoDBCl
 			Password: cfg.Password,
 		})
 	}
+
+	// Configure connection pooling for better performance
+	clientOptions.SetMaxPoolSize(100)                        // Maximum number of connections in the pool
+	clientOptions.SetMinPoolSize(10)                         // Minimum number of connections to maintain
+	clientOptions.SetMaxConnIdleTime(30 * time.Second)       // Close connections idle for 30 seconds
+	clientOptions.SetConnectTimeout(10 * time.Second)        // Connection timeout
+	clientOptions.SetSocketTimeout(30 * time.Second)         // Socket timeout for operations
+	clientOptions.SetServerSelectionTimeout(5 * time.Second) // Server selection timeout
+
+	// Enable write concern for better performance
+	clientOptions.SetWriteConcern(writeconcern.Majority()) // Use majority write concern for consistency
 
 	// Connect to MongoDB
 	client, err := mongo.Connect(ctx, clientOptions)
