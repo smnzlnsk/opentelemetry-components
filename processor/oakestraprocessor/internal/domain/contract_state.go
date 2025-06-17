@@ -346,7 +346,7 @@ func (cs *ContractState) Evaluate() calculation.Results {
 				params := cs.GetParameters(contract)
 				result, err := expr.Evaluate(params)
 				if err != nil {
-					cs.logger.Error("Failed to evaluate expression", zap.Error(err))
+					cs.logger.Error("Failed to evaluate expression", zap.Error(err), zap.String("service", contract.Service), zap.String("formula", contract.Formula), zap.String("state", contract.State))
 					continue
 				}
 
