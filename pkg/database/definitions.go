@@ -1,6 +1,7 @@
 package database
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/smnzlnsk/opentelemetry-components/pkg/metric"
@@ -60,4 +61,13 @@ func (m *HostMetricsMap) InstanceMetricsForEvaluation(serviceIdentifier string) 
 	}
 
 	return values
+}
+
+// Helper functions for metric ID building
+func BuildMetricID(name string, state string, age int) string {
+	return name + "(" + fmt.Sprintf("%d", age) + ")" + "{" + state + "}"
+}
+
+func CalculateAge(length int, index int) int {
+	return (length - 1) - index
 }

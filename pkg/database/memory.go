@@ -1,7 +1,6 @@
 package database
 
 import (
-	"fmt"
 	"sync"
 	"time"
 )
@@ -58,15 +57,6 @@ func (db *memoryDatabase) Cleanup(maxAge time.Duration) {
 			delete(db.timestamps, jobName)
 		}
 	}
-}
-
-// Helper functions for metric ID building
-func buildMetricID(name string, state string, age int) string {
-	return name + "(" + fmt.Sprintf("%d", age) + ")" + "{" + state + "}"
-}
-
-func calculateAge(length int, index int) int {
-	return (length - 1) - index
 }
 
 // Global memory database instance
