@@ -23,7 +23,6 @@ type DatapointManager interface {
 	DeleteDatapointForService(service string) error
 	GetDatapoints() map[datapoint.Key]map[int]datapoint.Datapoint
 	GetCurrentIndex(key datapoint.Key) int
-	SaveCalculationResults(metrics pmetric.Metrics) error
 	Shutdown()
 }
 
@@ -50,7 +49,7 @@ func NewDatapointManager(logger *zap.Logger, metricsService MetricsService) Data
 		metricsService: metricsService,
 		buffer:         make([]database.HostMetrics, 0),
 		bufferSize:     100,
-		flushInterval:  1 * time.Second,
+		flushInterval:  5 * time.Second,
 		stopChan:       make(chan struct{}),
 		logger:         logger,
 	}
@@ -170,93 +169,6 @@ func (d *datapointManager) GetDatapoint(key datapoint.Key, age int) (datapoint.D
 		}
 	}
 	return datapoint.Datapoint{}, false
-}
-
-// SaveCalculationResults saves the calculation results to the database
-func (d *datapointManager) SaveCalculationResults(metrics pmetric.Metrics) error {
-	host := d.GetHost(metrics)
-
-	dbMetrics := database.HostMetrics{
-		Host:                   host,
-		SystemMetrics:          []database.MetricDatapoints{},
-		ServiceInstanceMetrics: []database.ServiceInstanceMetrics{},
-	}
-
-	// Services map to track service metrics - use map for grouping
-	serviceMap := make(map[string]*database.ServiceInstanceMetrics)
-
-	// Process all resource metrics
-	for i := 0; i < metrics.ResourceMetrics().Len(); i++ {
-		rm := metrics.ResourceMetrics().At(i)
-
-		// Extract service name from resource attributes
-		serviceName := ""
-		if svcAttr, ok := rm.Resource().Attributes().Get("container_id"); ok {
-			serviceName = svcAttr.Str()
-		}
-
-		jobName, instanceNumber := splitServiceName(serviceName)
-
-		// Process all scope metrics for this resource
-		for j := 0; j < rm.ScopeMetrics().Len(); j++ {
-			sm := rm.ScopeMetrics().At(j)
-
-			// Check if the scope metric is coming from the oakestraprocessor
-			if !strings.Contains(sm.Scope().Name(), "oakestraprocessor/internal/processor") {
-				continue
-			}
-
-			// Process all metrics in this scope
-			for k := 0; k < sm.Metrics().Len(); k++ {
-				m := sm.Metrics().At(k)
-
-				// Extract datapoints
-				datapoints := d.extractDatapointsFromMetric(m)
-				if datapoints == nil {
-					continue
-				}
-
-				// Determine if this is a container metric
-				if IsContainerMetric(m.Name()) {
-					for _, dp := range datapoints {
-						// Group metrics by service instance
-						if serviceMap[serviceName] == nil {
-							serviceMap[serviceName] = &database.ServiceInstanceMetrics{
-								JobName:        jobName,
-								InstanceNumber: instanceNumber,
-								Metrics:        []database.MetricDatapoints{},
-							}
-						}
-
-						// Add the metric datapoint to the service instance
-						serviceMap[serviceName].Metrics = append(serviceMap[serviceName].Metrics, database.MetricDatapoints{
-							Identifier: metric.Key{
-								Name:  m.Name(),
-								State: dp.state,
-								Type:  metric.MetricValueTypeRaw,
-							},
-							Datapoints: []database.MetricDatapoint{
-								{
-									Value:     dp.value,
-									Timestamp: time.Now(),
-								},
-							},
-						})
-					}
-				}
-			}
-		}
-	}
-
-	// Convert the service map to a slice for BSON compatibility
-	for _, serviceMetrics := range serviceMap {
-		dbMetrics.ServiceInstanceMetrics = append(dbMetrics.ServiceInstanceMetrics, *serviceMetrics)
-	}
-
-	// Add metrics to buffer for async processing
-	d.addToBuffer(dbMetrics)
-
-	return nil
 }
 
 // SaveMetrics saves the incoming metrics to memory and simulatenously collects information to save to the database

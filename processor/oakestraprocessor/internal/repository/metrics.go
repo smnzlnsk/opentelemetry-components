@@ -30,13 +30,6 @@ func NewMetricsRepository(collection *mongo.Collection, logger *zap.Logger) doma
 // SaveMetrics saves OpenTelemetry metrics to MongoDB efficiently
 // We assume all metrics in the input are from a single host
 func (r *metricsRepository) SaveMetrics(ctx context.Context, hostMetrics database.HostMetrics) error {
-	// The core issue is that we should not create dynamic field names with dots at all.
-	// Instead, use the existing document structure and leverage MongoDB's array update capabilities.
-
-	// For performance, use a more sophisticated approach:
-	// 1. Keep the existing document structure (HostMetrics)
-	// 2. Use atomic operations to update arrays efficiently
-	// 3. Avoid deep dot notation in field names entirely
 
 	filter := bson.M{"host": hostMetrics.Host}
 
@@ -57,11 +50,8 @@ func (r *metricsRepository) SaveMetrics(ctx context.Context, hostMetrics databas
 		return err
 	}
 
-	// Document exists - merge efficiently using application logic rather than complex MongoDB operations
-	// This avoids the dot notation issue entirely and gives us more control
 	merged := r.mergeHostMetricsEfficiently(existingDoc, hostMetrics)
 
-	// Replace the entire document (more predictable than complex update operations)
 	_, err = r.collection.ReplaceOne(ctx, filter, merged)
 	if err != nil {
 		r.logger.Error("Failed to replace host metrics", zap.Error(err), zap.String("host", hostMetrics.Host))
