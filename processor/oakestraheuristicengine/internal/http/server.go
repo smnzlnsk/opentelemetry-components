@@ -175,22 +175,5 @@ func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	/*
-		for i := range instances {
-			values, err := s.metricsService.GetJobMetricsAsMap(
-				context.Background(),
-				jobName,
-			)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			instanceValues := values.InstanceMetricsForEvaluation(
-				fmt.Sprintf("%s.instance.%d", jobName, instances[i].InstanceNumber),
-			)
-			instances[i].Priority = processor.Evaluator().Evaluate(1, instanceValues) // TODO: incorporate job name for evaluation
-		}
-	*/
-
 	http.Error(w, "ok", http.StatusOK)
 }
