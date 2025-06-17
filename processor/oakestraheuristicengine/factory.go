@@ -26,6 +26,7 @@ func createDefaultConfig() component.Config {
 			Port:    8080,
 			Host:    "0.0.0.0",
 		},
+		PersistentMetrics: false,
 		MongoDB: config.MongoDBConfig{
 			Host:     "localhost",
 			Port:     27017,

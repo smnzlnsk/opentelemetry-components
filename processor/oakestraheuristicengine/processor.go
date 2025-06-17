@@ -76,26 +76,35 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 		return err
 	}
 
-	// initialize mongodb client
-	dbClient, err := database.NewMongoDBClient(&p.config.MongoDB, p.logger)
-	if err != nil {
-		return err
-	}
+	// Only initialize database components if persistent metrics are enabled
+	if p.config.PersistentMetrics {
+		p.logger.Info("PersistentMetrics enabled, initializing database components")
 
-	p.mongodbClient = dbClient
-	p.repositories = repository.NewRepositories(dbClient, p.logger)
-
-	// initialize services
-	p.services = service.NewServices(p.repositories, p.logger)
-
-	// initialize indexes
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if err := p.services.GetMetricsService().EnsureIndexes(ctx); err != nil {
-			p.logger.Error("Failed to create database indexes", zap.Error(err))
+		// initialize mongodb client
+		dbClient, err := database.NewMongoDBClient(&p.config.MongoDB, p.logger)
+		if err != nil {
+			return err
 		}
-	}()
+
+		p.mongodbClient = dbClient
+		p.repositories = repository.NewRepositories(dbClient, p.logger)
+
+		// initialize services with repositories
+		p.services = service.NewServices(p.repositories, p.logger)
+
+		// initialize indexes
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err := p.services.GetMetricsService().EnsureIndexes(ctx); err != nil {
+				p.logger.Error("Failed to create database indexes", zap.Error(err))
+			}
+		}()
+	} else {
+		p.logger.Info("PersistentMetrics disabled, initializing services without database components")
+		// Initialize services with nil repositories - service will handle memory database only
+		p.services = service.NewServices(nil, p.logger)
+	}
 
 	for _, entity := range p.activeEntities {
 		if err := entity.Start(); err != nil {
@@ -158,6 +167,8 @@ func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) er
 			Host: p.config.HTTPServer.Host,
 			Port: p.config.HTTPServer.Port,
 		}
+
+		// Always pass metricsService since it now handles both memory and persistent metrics
 		p.httpServer = internalhttp.NewServer(serverConfig, p.logger, p.policies, p.services.GetMetricsService())
 		if err := p.httpServer.Start(); err != nil {
 			p.logger.Error("Failed to start HTTP server", zap.Error(err))

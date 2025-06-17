@@ -11,8 +11,14 @@ type services struct {
 }
 
 func NewServices(repositories *repository.Repositories, logger *zap.Logger) *services {
+	var metricsRepository domain.MetricsRepository
+	if repositories != nil {
+		metricsRepository = repositories.MetricsRepository
+	}
+	// metricsRepository will be nil if repositories is nil (PersistentMetrics disabled)
+
 	return &services{
-		MetricsService: NewMetricsService(repositories.MetricsRepository, logger),
+		MetricsService: NewMetricsService(metricsRepository, logger),
 	}
 }
 

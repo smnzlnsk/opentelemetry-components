@@ -97,6 +97,7 @@ func (r *routingEntity) Evaluate(arguments ...interface{}) error {
 		Results: make([]evaluation.Entry, 0, len(instances)),
 	}
 
+	// Get metrics for evaluation - metricsService handles memory vs persistent logic internally
 	values, err := r.services.GetMetricsService().GetJobMetricsAsMap(
 		context.Background(),
 		jobName,

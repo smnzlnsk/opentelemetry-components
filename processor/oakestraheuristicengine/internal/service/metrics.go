@@ -5,6 +5,7 @@ import (
 
 	"github.com/smnzlnsk/opentelemetry-components/pkg/database"
 	"github.com/smnzlnsk/opentelemetry-components/processor/oakestraheuristicengine/internal/domain"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 )
 
@@ -15,7 +16,7 @@ type metricsService struct {
 
 func NewMetricsService(repository domain.MetricsRepository, logger *zap.Logger) domain.MetricsService {
 	return &metricsService{
-		repository: repository,
+		repository: repository, // Can be nil if PersistentMetrics is disabled
 		logger:     logger,
 	}
 }
@@ -24,50 +25,72 @@ func (s *metricsService) GetJobMetrics(ctx context.Context, jobName string) (dat
 	// First try to get metrics from the memory database (direct processor communication)
 	memoryDB := database.GetGlobalMemoryDatabase()
 	if memoryMetrics, exists := memoryDB.GetMetrics(jobName); exists {
-		s.logger.Info("Retrieved job metrics from memory database",
-			zap.String("job_name", jobName),
-			zap.Int("hosts", len(memoryMetrics)))
-
 		// Convert HostMetricsMap back to HostMetrics for compatibility
 		// This is a temporary conversion until we fully migrate to HostMetricsMap
 		return s.convertMapToHostMetrics(memoryMetrics), nil
 	}
 
-	// Fallback to database if not available in memory database
-	s.logger.Info("Fetching job metrics from database (memory database miss)", zap.String("job_name", jobName))
-	return s.repository.GetJobMetrics(ctx, jobName)
+	// Fallback to database if not available in memory database and repository is available
+	if s.repository != nil {
+		s.logger.Info("Fetching job metrics from database (memory database miss)", zap.String("job_name", jobName))
+		return s.repository.GetJobMetrics(ctx, jobName)
+	}
+
+	// No persistent metrics available
+	s.logger.Warn("No metrics found in memory database and persistent metrics disabled",
+		zap.String("job_name", jobName))
+	return database.HostMetrics{}, mongo.ErrNoDocuments
 }
 
 func (s *metricsService) GetJobMetricsAsMap(ctx context.Context, jobName string) (database.HostMetricsMap, error) {
 	// First try to get metrics from the memory database (direct processor communication)
 	memoryDB := database.GetGlobalMemoryDatabase()
 	if memoryMetrics, exists := memoryDB.GetMetrics(jobName); exists {
-		s.logger.Info("Retrieved job metrics from memory database",
-			zap.String("job_name", jobName),
-			zap.Int("hosts", len(memoryMetrics)))
 		return memoryMetrics, nil
 	}
 
-	// Fallback to database if not available in memory database
-	s.logger.Info("Fetching job metrics from database (memory database miss)", zap.String("job_name", jobName))
-	return s.repository.GetJobMetricsAsMap(ctx, jobName)
+	// Fallback to database if not available in memory database and repository is available
+	if s.repository != nil {
+		s.logger.Info("Fetching job metrics from database (memory database miss)", zap.String("job_name", jobName))
+		return s.repository.GetJobMetricsAsMap(ctx, jobName)
+	}
+
+	// No persistent metrics available
+	s.logger.Warn("No metrics found in memory database and persistent metrics disabled",
+		zap.String("job_name", jobName))
+	return database.HostMetricsMap{}, mongo.ErrNoDocuments
 }
 
 // GetJobMetricsBatch gets metrics for multiple jobs in a single batch operation
 func (s *metricsService) GetJobMetricsBatch(ctx context.Context, jobNames []string) (map[string]database.HostMetrics, error) {
-	return s.repository.GetJobMetricsBatch(ctx, jobNames)
+	if s.repository != nil {
+		return s.repository.GetJobMetricsBatch(ctx, jobNames)
+	}
+
+	s.logger.Warn("Batch metrics request with persistent metrics disabled",
+		zap.Strings("job_names", jobNames))
+	return make(map[string]database.HostMetrics), mongo.ErrNoDocuments
 }
 
 // GetJobMetricsAsMapBatch gets metrics as map for multiple jobs in a single batch operation
 func (s *metricsService) GetJobMetricsAsMapBatch(ctx context.Context, jobNames []string) (map[string]database.HostMetricsMap, error) {
-	s.logger.Debug("Batch request, fetching from database",
+	if s.repository != nil {
+		return s.repository.GetJobMetricsAsMapBatch(ctx, jobNames)
+	}
+
+	s.logger.Warn("Batch metrics map request with persistent metrics disabled",
 		zap.Strings("job_names", jobNames))
-	return s.repository.GetJobMetricsAsMapBatch(ctx, jobNames)
+	return make(map[string]database.HostMetricsMap), mongo.ErrNoDocuments
 }
 
 // EnsureIndexes ensures database indexes are created for optimal performance
 func (s *metricsService) EnsureIndexes(ctx context.Context) error {
-	return s.repository.EnsureIndexes(ctx)
+	if s.repository != nil {
+		return s.repository.EnsureIndexes(ctx)
+	}
+
+	s.logger.Info("Skipping database index creation (persistent metrics disabled)")
+	return nil
 }
 
 // convertMapToHostMetrics converts HostMetricsMap back to HostMetrics for backward compatibility

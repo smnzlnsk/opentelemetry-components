@@ -11,9 +11,10 @@ import (
 // Config defines the configuration for the oakestraheuristicengine processor.
 type Config struct {
 	// Add your configuration fields here
-	HTTPServer     config.HTTPServerConfig     `mapstructure:"http_server"`
-	MongoDB        config.MongoDBConfig        `mapstructure:"mongodb"`
-	ServiceManager config.ServiceManagerConfig `mapstructure:"service_manager"`
+	HTTPServer        config.HTTPServerConfig     `mapstructure:"http_server"`
+	PersistentMetrics bool                        `mapstructure:"persistent_metrics"`
+	MongoDB           config.MongoDBConfig        `mapstructure:"mongodb"`
+	ServiceManager    config.ServiceManagerConfig `mapstructure:"service_manager"`
 }
 
 var _ component.Config = (*Config)(nil)
@@ -33,13 +34,15 @@ func (cfg *Config) Validate() error {
 		}
 	}
 
-	// Validate MongoDB configuration
-	if cfg.MongoDB.Host == "" {
-		return errors.New("mongodb.host is required")
-	}
+	// Validate MongoDB configuration only if persistent metrics are enabled
+	if cfg.PersistentMetrics {
+		if cfg.MongoDB.Host == "" {
+			return errors.New("mongodb.host is required when persistent_metrics is enabled")
+		}
 
-	if cfg.MongoDB.Port <= 0 || cfg.MongoDB.Port > 65535 {
-		return errors.New("mongodb.port must be between 1 and 65535")
+		if cfg.MongoDB.Port <= 0 || cfg.MongoDB.Port > 65535 {
+			return errors.New("mongodb.port must be between 1 and 65535 when persistent_metrics is enabled")
+		}
 	}
 
 	return nil
