@@ -46,29 +46,60 @@ func (c *MemoryMetricProcessor) processMetrics(_ pmetric.Metrics) (pmetric.Metri
 
 	results := c.contracts.Evaluate()
 
-	for key, value := range results {
-		c.mb.RecordServiceMemoryUtilisationDataPoint(
-			pcommon.NewTimestampFromTime(time.Now()),
-			value,
-			metadata.MapAttributeState[key.State],
-		)
+	if len(results) == 0 {
+		return c.mb.Emit(), nil
 	}
 
-	if len(results) > 0 {
+	// Group results by service name
+	serviceGroups := make(map[string][]struct {
+		Key   calculation.ResultKey
+		Value float64
+	})
 
-		var serviceName string
-		for key := range results {
-			serviceName = key.Service
-			break
+	for key, value := range results {
+		serviceName := key.Service
+		if serviceGroups[serviceName] == nil {
+			serviceGroups[serviceName] = make([]struct {
+				Key   calculation.ResultKey
+				Value float64
+			}, 0)
+		}
+		serviceGroups[serviceName] = append(serviceGroups[serviceName], struct {
+			Key   calculation.ResultKey
+			Value float64
+		}{Key: key, Value: value})
+	}
+
+	// Create a final metrics object to hold all resource metrics
+	finalMetrics := pmetric.NewMetrics()
+
+	// Create a separate resource metric for each unique service
+	for serviceName, serviceData := range serviceGroups {
+		// Create a new metrics builder for this service
+		mb := metadata.NewMetricsBuilder(c.config.MetricsBuilderConfig, receiver.Settings{TelemetrySettings: c.settings.TelemetrySettings})
+
+		// Add datapoints for this service
+		for _, data := range serviceData {
+			key := data.Key
+			value := data.Value
+			mb.RecordServiceMemoryUtilisationDataPoint(
+				pcommon.NewTimestampFromTime(time.Now()),
+				value,
+				metadata.MapAttributeState[key.State],
+			)
 		}
 
-		rb := c.mb.NewResourceBuilder()
+		// Create resource for this service
+		rb := mb.NewResourceBuilder()
 		rb.SetServiceName(serviceName)
 		rb.SetContainerID(serviceName)
 
-		return c.mb.Emit(metadata.WithResource(rb.Emit())), nil
+		// Emit metrics for this service and add to final metrics
+		serviceMetrics := mb.Emit(metadata.WithResource(rb.Emit()))
+		serviceMetrics.ResourceMetrics().MoveAndAppendTo(finalMetrics.ResourceMetrics())
 	}
-	return c.mb.Emit(), nil
+
+	return finalMetrics, nil
 }
 
 func (c *MemoryMetricProcessor) Shutdown(_ context.Context) error {
