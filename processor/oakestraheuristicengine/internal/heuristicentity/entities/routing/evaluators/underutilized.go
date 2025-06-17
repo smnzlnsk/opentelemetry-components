@@ -22,27 +22,31 @@ func NewUnderutilizedEvaluator(identifier string) domain.Evaluator {
 	// We do not want to return these function defintions from the respective functions below,
 	// as they would lead to more garbage collection pressure
 	alertCondition = func(results map[string]interface{}, instances []int) (bool, error) {
-		for _, instance := range instances {
-			prefix := fmt.Sprintf("job.instance.%d", instance) // Create current job instance prefix
+		/*
+			for _, instance := range instances {
+				prefix := fmt.Sprintf("job.instance.%d", instance) // Create current job instance prefix
 
-			delta, ok := results[fmt.Sprintf("%s.result{delta}", prefix)].(float64)
-			if !ok {
-				continue
-			}
-			if delta > 0.2 {
-				return true, nil
-			}
+				delta, ok := results[fmt.Sprintf("%s.result{delta}", prefix)].(float64)
+				if !ok {
+					continue
+				}
+				if delta > 0.2 {
+					return true, nil
+				}
 
-			usageTotal, ok := results[fmt.Sprintf("%s.result{current}", prefix)].(float64)
-			if !ok {
-				continue
+				usageTotal, ok := results[fmt.Sprintf("%s.result{current}", prefix)].(float64)
+				if !ok {
+					continue
+				}
+				if usageTotal > 0.9 {
+					return true, nil
+				}
 			}
-			if usageTotal > 0.9 {
-				return true, nil
-			}
-		}
-		return false, nil
+			return false, nil
+		*/
+		return true, nil
 	}
+
 	routeCondition = func(results map[string]interface{}, instances []int) (bool, error) {
 		for _, instance := range instances {
 			prefix := fmt.Sprintf("job.instance.%d", instance) // Create current job instance prefix
