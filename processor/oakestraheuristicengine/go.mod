@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/Knetic/govaluate v3.0.0+incompatible
-	github.com/smnzlnsk/opentelemetry-components v0.0.5-rc4
+	github.com/smnzlnsk/opentelemetry-components v0.0.5-rc7
 	github.com/stretchr/testify v1.10.0
 	go.mongodb.org/mongo-driver v1.17.3
 	go.opentelemetry.io/collector/component v0.109.0
