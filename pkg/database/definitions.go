@@ -61,28 +61,17 @@ func (m *HostMetricsMap) InstanceMetricsForEvaluation(serviceIdentifier string) 
 		}
 	}
 
-	if len(values) == 0 {
-		availableServices := make([]string, 0)
-		for _, hostMetrics := range *m {
-			for serviceID := range hostMetrics.ServiceInstanceMetrics {
-				availableServices = append(availableServices, serviceID)
-			}
-		}
-	}
-
 	return values
 }
 
 // MetricsBroker provides direct communication between processors
 type MetricsBroker interface {
 	// PublishMetrics publishes metrics for a job
-	PublishMetrics(jobName string, metrics HostMetrics)
-	// GetMetrics retrieves the latest metrics for a job
-	GetMetrics(jobName string) (HostMetrics, bool)
-	// GetMetricsAsMap retrieves the latest metrics for a job as a map
-	GetMetricsAsMap(jobName string) (HostMetricsMap, bool)
+	PublishMetrics(jobName string, metrics HostMetricsMap)
+	// GetMetrics retrieves the latest metrics for a job as HostMetricsMap
+	GetMetrics(jobName string) (HostMetricsMap, bool)
 	// Subscribe to metrics updates for a job
-	Subscribe(jobName string, callback func(HostMetrics))
+	Subscribe(jobName string, callback func(HostMetricsMap))
 	// Clear old metrics
 	Cleanup(maxAge time.Duration)
 }
@@ -90,36 +79,43 @@ type MetricsBroker interface {
 // InMemoryMetricsBroker implements MetricsBroker using in-memory storage
 type InMemoryMetricsBroker struct {
 	mu          sync.RWMutex
-	metrics     map[string]HostMetrics
+	metrics     map[string]HostMetricsMap
 	timestamps  map[string]time.Time
-	subscribers map[string][]func(HostMetrics)
+	subscribers map[string][]func(HostMetricsMap)
 }
 
 // NewInMemoryMetricsBroker creates a new in-memory metrics broker
 func NewInMemoryMetricsBroker() MetricsBroker {
 	return &InMemoryMetricsBroker{
-		metrics:     make(map[string]HostMetrics),
+		metrics:     make(map[string]HostMetricsMap),
 		timestamps:  make(map[string]time.Time),
-		subscribers: make(map[string][]func(HostMetrics)),
+		subscribers: make(map[string][]func(HostMetricsMap)),
 	}
 }
 
-func (b *InMemoryMetricsBroker) PublishMetrics(jobName string, metrics HostMetrics) {
+func (b *InMemoryMetricsBroker) PublishMetrics(jobName string, metrics HostMetricsMap) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	b.metrics[jobName] = metrics
 	b.timestamps[jobName] = time.Now()
 
-	// Notify subscribers
+	// Notify subscribers immediately for real-time processing
 	if callbacks, exists := b.subscribers[jobName]; exists {
+		for _, callback := range callbacks {
+			go callback(metrics) // Run callbacks asynchronously to avoid blocking
+		}
+	}
+
+	// Also notify wildcard subscribers (subscribed to all jobs)
+	if callbacks, exists := b.subscribers["*"]; exists {
 		for _, callback := range callbacks {
 			go callback(metrics) // Run callbacks asynchronously
 		}
 	}
 }
 
-func (b *InMemoryMetricsBroker) GetMetrics(jobName string) (HostMetrics, bool) {
+func (b *InMemoryMetricsBroker) GetMetrics(jobName string) (HostMetricsMap, bool) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
@@ -127,57 +123,12 @@ func (b *InMemoryMetricsBroker) GetMetrics(jobName string) (HostMetrics, bool) {
 	return metrics, exists
 }
 
-func (b *InMemoryMetricsBroker) GetMetricsAsMap(jobName string) (HostMetricsMap, bool) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	metrics, exists := b.metrics[jobName]
-	if !exists {
-		return HostMetricsMap{}, false
-	}
-
-	// Transform to map format
-	hostMetrics := make(HostMetricsMap)
-	hostMetrics[metrics.Host] = MetricsMap{
-		HostMetrics:            make(map[string]float64),
-		ServiceInstanceMetrics: make(map[string]map[string]float64),
-	}
-
-	// Process system metrics
-	for _, systemMetric := range metrics.SystemMetrics {
-		for i, datapoint := range systemMetric.Datapoints {
-			age := calculateAge(len(systemMetric.Datapoints), i)
-			metricID := buildMetricID(systemMetric.Identifier.Name, systemMetric.Identifier.State, age)
-			hostMetrics[metrics.Host].HostMetrics[metricID] = datapoint.Value
-		}
-	}
-
-	// Process service instance metrics
-	for _, serviceInstance := range metrics.ServiceInstanceMetrics {
-		serviceID := serviceInstance.JobName + ".instance." + fmt.Sprintf("%d", serviceInstance.InstanceNumber)
-
-		if _, exists := hostMetrics[metrics.Host].ServiceInstanceMetrics[serviceID]; !exists {
-			hostMetrics[metrics.Host].ServiceInstanceMetrics[serviceID] = make(map[string]float64)
-		}
-
-		for _, metric := range serviceInstance.Metrics {
-			for i, datapoint := range metric.Datapoints {
-				age := calculateAge(len(metric.Datapoints), i)
-				metricID := buildMetricID(metric.Identifier.Name, metric.Identifier.State, age)
-				hostMetrics[metrics.Host].ServiceInstanceMetrics[serviceID][metricID] = datapoint.Value
-			}
-		}
-	}
-
-	return hostMetrics, true
-}
-
-func (b *InMemoryMetricsBroker) Subscribe(jobName string, callback func(HostMetrics)) {
+func (b *InMemoryMetricsBroker) Subscribe(jobName string, callback func(HostMetricsMap)) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	if _, exists := b.subscribers[jobName]; !exists {
-		b.subscribers[jobName] = make([]func(HostMetrics), 0)
+		b.subscribers[jobName] = make([]func(HostMetricsMap), 0)
 	}
 	b.subscribers[jobName] = append(b.subscribers[jobName], callback)
 }
