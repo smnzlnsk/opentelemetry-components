@@ -12,9 +12,16 @@ type services struct {
 }
 
 func NewServices(repositories *repository.Repositories, logger *zap.Logger) domain.Services {
+	// Contract repository should always be available (contracts are always persisted)
+	// Only metrics repository is conditional based on PersistentMetrics flag
+	var metricsRepository domain.MetricsRepository
+	if repositories != nil {
+		metricsRepository = repositories.MetricsRepository
+	}
+
 	return &services{
 		ContractService: NewContractService(repositories.ContractRepository, logger),
-		MetricsService:  NewMetricsService(repositories.MetricsRepository, logger),
+		MetricsService:  NewMetricsService(metricsRepository, logger),
 	}
 }
 

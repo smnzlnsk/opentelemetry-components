@@ -33,12 +33,25 @@ type MultiProcessor struct {
 }
 
 func newMultiProcessor(ctx context.Context, set processor.Settings, cfg *Config, next consumer.Metrics) *MultiProcessor {
+	// Always initialize MongoDB client (needed for contracts)
 	dbClient, err := database.NewMongoDBClient(&cfg.MongoDB, set.Logger)
 	if err != nil {
-		set.Logger.Error(err.Error())
+		set.Logger.Error("Failed to initialize MongoDB client", zap.Error(err))
 		return nil
 	}
-	repositories := repository.NewRepositories(dbClient, set.Logger)
+
+	// Always initialize repositories, but only create metrics repository if PersistentMetrics is enabled
+	repositories := &repository.Repositories{
+		ContractRepository: repository.NewContractRepository(dbClient.GetDatabase().Collection("contracts"), set.Logger),
+	}
+
+	if cfg.PersistentMetrics {
+		set.Logger.Info("PersistentMetrics enabled, initializing metrics repository")
+		repositories.MetricsRepository = repository.NewMetricsRepository(dbClient.GetDatabase().Collection("metrics"), set.Logger)
+	} else {
+		set.Logger.Info("PersistentMetrics disabled, skipping metrics repository (contracts still enabled)")
+		repositories.MetricsRepository = nil
+	}
 
 	services := service.NewServices(repositories, set.Logger)
 
@@ -56,14 +69,14 @@ func newMultiProcessor(ctx context.Context, set processor.Settings, cfg *Config,
 		logger:           set.Logger,
 		config:           cfg,
 		services:         services,
-		mongodbClient:    dbClient,
+		mongodbClient:    dbClient, // Always initialized for contracts
 		datapointManager: datapointManager,
 	}
 
 	// Initialize gRPC server
 	proc.grpcServer = NewGRPCServer(proc, cfg.GRPCPort)
 
-	// Ensure database indexes are created for optimal performance
+	// Always ensure database indexes are created (for contracts and optionally metrics)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()

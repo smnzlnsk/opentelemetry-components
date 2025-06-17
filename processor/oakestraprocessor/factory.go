@@ -34,6 +34,7 @@ func NewFactory() processor.Factory {
 
 func createDefaultConfig() component.Config {
 	return &Config{
+		PersistentMetrics: true,
 		MongoDB: config.MongoDBConfig{
 			Host:     "localhost",
 			Port:     27017,

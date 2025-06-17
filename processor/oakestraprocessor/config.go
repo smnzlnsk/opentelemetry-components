@@ -23,9 +23,10 @@ var (
 
 // Config represents the processor config settings within the collector's config.yaml
 type Config struct {
-	Processors map[string]internal.Config `mapstructure:"-"`
-	GRPCPort   int                        `mapstructure:"grpc_port"`
-	MongoDB    config.MongoDBConfig       `mapstructure:"mongodb"`
+	Processors        map[string]internal.Config `mapstructure:"-"`
+	GRPCPort          int                        `mapstructure:"grpc_port"`
+	PersistentMetrics bool                       `mapstructure:"persistent_metrics"`
+	MongoDB           config.MongoDBConfig       `mapstructure:"mongodb"`
 }
 
 // Validate checks if the processor configuration is valid
@@ -34,8 +35,9 @@ func (cfg *Config) Validate() error {
 		return errors.New("must provide at least one subprocessor")
 	}
 
+	// MongoDB is always required for contract persistence
 	if cfg.MongoDB.Host == "" {
-		return errors.New("mongodb.host is required")
+		return errors.New("mongodb.host is required for contract persistence")
 	}
 
 	if cfg.MongoDB.Port <= 0 || cfg.MongoDB.Port > 65535 {

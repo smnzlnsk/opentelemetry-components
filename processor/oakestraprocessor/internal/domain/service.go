@@ -14,6 +14,7 @@ type Services interface {
 }
 
 type MetricsService interface {
+	Persistent() bool
 	SaveMetrics(ctx context.Context, dbHostMetrics database.HostMetrics) error
 	SaveMetricsBatch(ctx context.Context, hostMetricsList []database.HostMetrics) error
 	GetJobMetrics(ctx context.Context, jobName string) (database.HostMetrics, error)

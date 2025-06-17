@@ -54,8 +54,13 @@ func NewDatapointManager(logger *zap.Logger, metricsService MetricsService) Data
 		logger:         logger,
 	}
 
-	// Start background flusher
-	go dm.backgroundFlusher()
+	// Only start background flusher if persistent metrics are enabled
+	if metricsService.Persistent() {
+		logger.Info("Starting background metrics flusher (persistent metrics enabled)")
+		go dm.backgroundFlusher()
+	} else {
+		logger.Info("Skipping background metrics flusher (persistent metrics disabled)")
+	}
 
 	return dm
 }
@@ -120,6 +125,12 @@ func (d *datapointManager) flushBuffer() {
 
 // addToBuffer adds metrics to buffer and flushes if needed
 func (d *datapointManager) addToBuffer(metrics database.HostMetrics) {
+	// Skip buffering if persistent metrics are disabled
+	if !d.metricsService.Persistent() {
+		d.logger.Debug("Skipping metrics buffering (persistent metrics disabled)")
+		return
+	}
+
 	d.bufferMutex.Lock()
 	defer d.bufferMutex.Unlock()
 
@@ -332,7 +343,20 @@ func (d *datapointManager) SaveMetrics(metrics pmetric.Metrics) error {
 	d.publishToBrokerMap(hostMetricsMap)
 
 	// BACKGROUND: Add metrics to buffer for async database persistence
+	// (will be skipped if persistent metrics are disabled)
 	d.addToBuffer(dbMetrics)
+
+	if d.logger != nil {
+		if d.metricsService.Persistent() {
+			d.logger.Debug("Metrics processed: published to memory and buffered for database",
+				zap.String("host", host),
+				zap.Int("service_instances", len(serviceMap)))
+		} else {
+			d.logger.Debug("Metrics processed: published to memory only (persistent metrics disabled)",
+				zap.String("host", host),
+				zap.Int("service_instances", len(serviceMap)))
+		}
+	}
 
 	return nil
 }
@@ -547,16 +571,6 @@ func (d *datapointManager) publishToBrokerMap(hostMetricsMap database.HostMetric
 		}
 	}
 
-	d.logger.Info("Publishing HostMetricsMap to broker immediately",
-		zap.Int("total_jobs", len(jobMetricsMap)))
-
-	// Log all job names being published
-	jobNames := make([]string, 0, len(jobMetricsMap))
-	for jobName := range jobMetricsMap {
-		jobNames = append(jobNames, jobName)
-	}
-	d.logger.Info("Job names for immediate notification", zap.Strings("job_names", jobNames))
-
 	// Publish each job's metrics to the broker immediately
 	for jobName, jobHostMetricsMap := range jobMetricsMap {
 		totalServiceInstances := 0
@@ -565,10 +579,6 @@ func (d *datapointManager) publishToBrokerMap(hostMetricsMap database.HostMetric
 		}
 
 		memoryDB.PublishMetrics(jobName, jobHostMetricsMap)
-		d.logger.Info("Immediate memory database notification sent",
-			zap.String("job_name", jobName),
-			zap.Int("service_instances", totalServiceInstances),
-			zap.Int("hosts", len(jobHostMetricsMap)))
 
 		// Verify the metrics were actually stored in the memory database
 		if verifyMetrics, exists := memoryDB.GetMetrics(jobName); exists {
@@ -576,9 +586,6 @@ func (d *datapointManager) publishToBrokerMap(hostMetricsMap database.HostMetric
 			for _, hostMetrics := range verifyMetrics {
 				verifiedServiceInstances += len(hostMetrics.ServiceInstanceMetrics)
 			}
-			d.logger.Info("Verified immediate notification in broker",
-				zap.String("job_name", jobName),
-				zap.Int("verified_service_instances", verifiedServiceInstances))
 		} else {
 			d.logger.Error("Failed to verify immediate notification in broker", zap.String("job_name", jobName))
 		}
