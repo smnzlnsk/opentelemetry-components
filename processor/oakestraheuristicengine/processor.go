@@ -72,7 +72,7 @@ func (p *heuristicEngineProcessor) Capabilities() consumer.Capabilities {
 
 func (p *heuristicEngineProcessor) Start(_ context.Context, _ component.Host) error {
 	// initialize csv logger
-	if err := logger.InitCSVLogger("heuristic_notifications.csv"); err != nil {
+	if err := logger.InitCSVLogger("/metrics/heuristic_notifications.csv"); err != nil {
 		return err
 	}
 
