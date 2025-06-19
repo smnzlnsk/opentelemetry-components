@@ -18,6 +18,7 @@ import (
 
 type DatapointManager interface {
 	GetHost(metrics pmetric.Metrics) string
+	GetHostFromService(service string) string
 	GetDatapoint(key datapoint.Key, age int) (datapoint.Datapoint, bool)
 	SaveMetrics(metrics pmetric.Metrics) error
 	DeleteDatapointForService(service string) error
@@ -187,18 +188,21 @@ func (d *datapointManager) SaveMetrics(metrics pmetric.Metrics) error {
 	// Get the host
 	host := d.GetHost(metrics)
 
-	// Build HostMetricsMap directly for immediate broker publishing
+	// Build HostMetricsMap directly for immediate memory database saving
 	hostMetricsMap := make(database.HostMetricsMap)
 	hostMetricsMap[host] = database.MetricsMap{
 		HostMetrics:            make(map[string]float64),
 		ServiceInstanceMetrics: make(map[string]map[string]float64),
 	}
 
-	// Also build HostMetrics for database persistence (backward compatibility)
-	dbMetrics := database.HostMetrics{
-		Host:                   host,
-		SystemMetrics:          []database.MetricDatapoints{},
-		ServiceInstanceMetrics: []database.ServiceInstanceMetrics{},
+	// Also build HostMetrics for database persistence
+	var dbMetrics database.HostMetrics
+	if d.metricsService.Persistent() {
+		dbMetrics = database.HostMetrics{
+			Host:                   host,
+			SystemMetrics:          []database.MetricDatapoints{},
+			ServiceInstanceMetrics: []database.ServiceInstanceMetrics{},
+		}
 	}
 
 	// Services map to track service metrics for database - use map for grouping
@@ -209,7 +213,7 @@ func (d *datapointManager) SaveMetrics(metrics pmetric.Metrics) error {
 		rm := metrics.ResourceMetrics().At(i)
 
 		// Extract service name from resource attributes
-		serviceName := ""
+		serviceName := host
 		if svcAttr, ok := rm.Resource().Attributes().Get("container_id"); ok {
 			serviceName = svcAttr.Str()
 		}
@@ -240,12 +244,12 @@ func (d *datapointManager) SaveMetrics(metrics pmetric.Metrics) error {
 				if IsContainerMetric(m.Name()) {
 					// Create service identifier for HostMetricsMap
 					serviceID := jobName + ".instance." + fmt.Sprintf("%d", instanceNumber)
-
 					// Initialize service instance metrics in HostMetricsMap if not exists
 					if _, exists := hostMetricsMap[host].ServiceInstanceMetrics[serviceID]; !exists {
 						hostMetricsMap[host].ServiceInstanceMetrics[serviceID] = make(map[string]float64)
 					}
 
+					// Populate metrics in datapoint manager
 					for _, dp := range datapoints {
 						key := datapoint.Key{
 							Service: serviceName,
@@ -266,35 +270,37 @@ func (d *datapointManager) SaveMetrics(metrics pmetric.Metrics) error {
 						metricID := database.BuildMetricID(m.Name(), dp.state, 0)
 						hostMetricsMap[host].ServiceInstanceMetrics[serviceID][metricID] = dp.value
 
-						// Group metrics by service instance for database
-						if serviceMap[serviceName] == nil {
-							serviceMap[serviceName] = &database.ServiceInstanceMetrics{
-								JobName:        jobName,
-								InstanceNumber: instanceNumber,
-								Metrics:        []database.MetricDatapoints{},
+						// Group metrics by service instance for database if persistent metrics are enabled
+						if d.metricsService.Persistent() {
+							if serviceMap[serviceName] == nil {
+								serviceMap[serviceName] = &database.ServiceInstanceMetrics{
+									JobName:        jobName,
+									InstanceNumber: instanceNumber,
+									Metrics:        []database.MetricDatapoints{},
+								}
 							}
-						}
 
-						// Add the metric datapoint to the service instance for database
-						serviceMap[serviceName].Metrics = append(serviceMap[serviceName].Metrics, database.MetricDatapoints{
-							Identifier: metric.Key{
-								Name:  m.Name(),
-								State: dp.state,
-								Type:  metric.MetricValueTypeRaw,
-							},
-							Datapoints: []database.MetricDatapoint{
-								{
-									Value:     dp.value,
-									Timestamp: time.Now(),
+							// Add the metric datapoint to the service instance for database
+							serviceMap[serviceName].Metrics = append(serviceMap[serviceName].Metrics, database.MetricDatapoints{
+								Identifier: metric.Key{
+									Name:  m.Name(),
+									State: dp.state,
+									Type:  metric.MetricValueTypeRaw,
 								},
-							},
-						})
+								Datapoints: []database.MetricDatapoint{
+									{
+										Value:     dp.value,
+										Timestamp: time.Now(),
+									},
+								},
+							})
+						}
 					}
 				} else {
 					// System metrics
 					for _, dp := range datapoints {
 						key := datapoint.Key{
-							Service: "",
+							Service: host,
 							Metric:  m.Name(),
 							State:   dp.state,
 						}
@@ -313,49 +319,49 @@ func (d *datapointManager) SaveMetrics(metrics pmetric.Metrics) error {
 						metricID := database.BuildMetricID(m.Name(), dp.state, 0)
 						hostMetricsMap[host].HostMetrics[metricID] = dp.value
 
-						// Add to database metrics
-						dbMetrics.SystemMetrics = append(dbMetrics.SystemMetrics, database.MetricDatapoints{
-							Identifier: metric.Key{
-								Name:  m.Name(),
-								State: dp.state,
-								Type:  metric.MetricValueTypeRaw,
-							},
-							Datapoints: []database.MetricDatapoint{
-								{
-									Value:     dp.value,
-									Timestamp: time.Now(),
+						// Add to database metrics if persistent metrics are enabled
+						if d.metricsService.Persistent() {
+							dbMetrics.SystemMetrics = append(dbMetrics.SystemMetrics, database.MetricDatapoints{
+								Identifier: metric.Key{
+									Name:  m.Name(),
+									State: dp.state,
+									Type:  metric.MetricValueTypeRaw,
 								},
-							},
-						})
+								Datapoints: []database.MetricDatapoint{
+									{
+										Value:     dp.value,
+										Timestamp: time.Now(),
+									},
+								},
+							})
+						}
 					}
 				}
 			}
 		}
 	}
 
-	// Convert the service map to a slice for BSON compatibility (database)
-	for _, serviceMetrics := range serviceMap {
-		dbMetrics.ServiceInstanceMetrics = append(dbMetrics.ServiceInstanceMetrics, *serviceMetrics)
-	}
-
 	// IMMEDIATE: Publish HostMetricsMap to broker for direct processor communication
 	// This happens synchronously to ensure heuristicengine gets notified immediately
-	d.publishToBrokerMap(hostMetricsMap)
+	d.saveToMemoryDatabase(host, hostMetricsMap)
 
-	// BACKGROUND: Add metrics to buffer for async database persistence
-	// (will be skipped if persistent metrics are disabled)
-	d.addToBuffer(dbMetrics)
-
-	if d.logger != nil {
-		if d.metricsService.Persistent() {
-			d.logger.Debug("Metrics processed: published to memory and buffered for database",
-				zap.String("host", host),
-				zap.Int("service_instances", len(serviceMap)))
-		} else {
-			d.logger.Debug("Metrics processed: published to memory only (persistent metrics disabled)",
-				zap.String("host", host),
-				zap.Int("service_instances", len(serviceMap)))
+	if d.metricsService.Persistent() {
+		// Convert the service map to a slice for BSON compatibility (database)
+		for _, serviceMetrics := range serviceMap {
+			dbMetrics.ServiceInstanceMetrics = append(dbMetrics.ServiceInstanceMetrics, *serviceMetrics)
 		}
+
+		// BACKGROUND: Add metrics to buffer for async database persistence
+		// (will be skipped if persistent metrics are disabled)
+		d.addToBuffer(dbMetrics)
+
+		d.logger.Debug("Metrics processed: published to memory and buffered for database",
+			zap.String("host", host),
+			zap.Int("service_instances", len(serviceMap)))
+	} else {
+		d.logger.Debug("Metrics processed: published to memory only (persistent metrics disabled)",
+			zap.String("host", host),
+			zap.Int("service_instances", len(serviceMap)))
 	}
 
 	return nil
@@ -518,76 +524,12 @@ func (d *datapointManager) extractDatapointsFromMetric(metric pmetric.Metric) []
 	return datapoints
 }
 
-// publishToBrokerMap immediately publishes HostMetricsMap to the broker for direct processor communication
-func (d *datapointManager) publishToBrokerMap(hostMetricsMap database.HostMetricsMap) {
+// saveToMemoryDatabase immediately push HostMetricsMap to the memory database for direct processor communication
+func (d *datapointManager) saveToMemoryDatabase(host string, hostMetricsMap database.HostMetricsMap) {
 	memoryDB := database.GetGlobalMemoryDatabase()
+	memoryDB.SaveMetrics(host, hostMetricsMap)
+}
 
-	// Group metrics by job name for publishing
-	jobMetricsMap := make(map[string]database.HostMetricsMap)
-
-	// Extract job names from service instance metrics
-	for hostName, hostMetrics := range hostMetricsMap {
-		for serviceID := range hostMetrics.ServiceInstanceMetrics {
-			// Extract job name from service ID (format: jobName.instance.instanceNumber)
-			parts := strings.Split(serviceID, ".instance.")
-			if len(parts) >= 2 {
-				jobName := parts[0]
-
-				// Initialize job metrics map if not exists
-				if _, exists := jobMetricsMap[jobName]; !exists {
-					jobMetricsMap[jobName] = make(database.HostMetricsMap)
-				}
-
-				// Initialize host in job metrics map if not exists
-				if _, exists := jobMetricsMap[jobName][hostName]; !exists {
-					jobMetricsMap[jobName][hostName] = database.MetricsMap{
-						HostMetrics:            make(map[string]float64),
-						ServiceInstanceMetrics: make(map[string]map[string]float64),
-					}
-				}
-
-				// Copy host metrics (system metrics)
-				for metricKey, metricValue := range hostMetrics.HostMetrics {
-					jobMetricsMap[jobName][hostName].HostMetrics[metricKey] = metricValue
-				}
-
-				// Copy this service instance metrics
-				jobMetricsMap[jobName][hostName].ServiceInstanceMetrics[serviceID] = hostMetrics.ServiceInstanceMetrics[serviceID]
-			}
-		}
-
-		// If there are no service instances but we have system metrics, publish under a default job
-		if len(hostMetrics.ServiceInstanceMetrics) == 0 && len(hostMetrics.HostMetrics) > 0 {
-			jobName := "system-metrics"
-
-			if _, exists := jobMetricsMap[jobName]; !exists {
-				jobMetricsMap[jobName] = make(database.HostMetricsMap)
-			}
-
-			jobMetricsMap[jobName][hostName] = database.MetricsMap{
-				HostMetrics:            hostMetrics.HostMetrics,
-				ServiceInstanceMetrics: make(map[string]map[string]float64),
-			}
-		}
-	}
-
-	// Publish each job's metrics to the broker immediately
-	for jobName, jobHostMetricsMap := range jobMetricsMap {
-		totalServiceInstances := 0
-		for _, hostMetrics := range jobHostMetricsMap {
-			totalServiceInstances += len(hostMetrics.ServiceInstanceMetrics)
-		}
-
-		memoryDB.PublishMetrics(jobName, jobHostMetricsMap)
-
-		// Verify the metrics were actually stored in the memory database
-		if verifyMetrics, exists := memoryDB.GetMetrics(jobName); exists {
-			verifiedServiceInstances := 0
-			for _, hostMetrics := range verifyMetrics {
-				verifiedServiceInstances += len(hostMetrics.ServiceInstanceMetrics)
-			}
-		} else {
-			d.logger.Error("Failed to verify immediate notification in broker", zap.String("job_name", jobName))
-		}
-	}
+func (d *datapointManager) GetHostFromService(service string) string {
+	return database.GetGlobalMemoryDatabase().GetHostFromService(service)
 }

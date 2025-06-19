@@ -6,7 +6,7 @@ require (
 	github.com/Knetic/govaluate v3.0.0+incompatible
 	github.com/google/go-cmp v0.6.0
 	github.com/smnzlnsk/monitoring-proto-lib v0.0.13
-	github.com/smnzlnsk/opentelemetry-components v0.0.5-rc7
+	github.com/smnzlnsk/opentelemetry-components v0.0.6
 	github.com/stretchr/testify v1.10.0
 	go.mongodb.org/mongo-driver v1.17.3
 	go.opentelemetry.io/collector/component v0.109.0

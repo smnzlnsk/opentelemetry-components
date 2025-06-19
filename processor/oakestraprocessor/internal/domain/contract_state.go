@@ -386,7 +386,8 @@ func (cs *ContractState) GetParameters(cc calculation.Contract) calculation.Para
 		// Reset service name for system metrics
 		serviceForLookup := cc.Service
 		if IsSystemMetric(arg.Metric) {
-			serviceForLookup = ""
+			// Get the host for the service from the database
+			serviceForLookup = cs.Datapoints.GetHostFromService(cc.Service)
 		}
 
 		key := datapoint.Key{
