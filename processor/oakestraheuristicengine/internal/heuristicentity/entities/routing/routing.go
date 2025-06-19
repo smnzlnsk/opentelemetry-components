@@ -46,12 +46,12 @@ func NewRoutingEntity(services domain.Services, logger *zap.Logger) domain.Heuri
 	// First initialize the processors evaluator
 	fpsEvaluator := evaluators.NewFpsEvaluator("fps")
 	closestEvaluator := evaluators.NewClosestEvaluator("closest")
-	underutilizedEvaluator := evaluators.NewUnderutilizedEvaluator("underutilized")
+	//underutilizedEvaluator := evaluators.NewUnderutilizedEvaluator("underutilized")
 
 	// Create and add the processors to the processor store
 	processorStore.Add(processor.NewProcessor("fps", fpsEvaluator))
 	processorStore.Add(processor.NewProcessor("closest", closestEvaluator))
-	processorStore.Add(processor.NewProcessor("underutilized", underutilizedEvaluator))
+	//processorStore.Add(processor.NewProcessor("underutilized", underutilizedEvaluator))
 
 	return &routingEntity{
 		processorStore: processorStore,
