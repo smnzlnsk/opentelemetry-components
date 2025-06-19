@@ -44,7 +44,7 @@ func InitCSVLogger(filePath string) error {
 		}
 
 		if fileInfo.Size() == 0 {
-			headers := []string{"timestamp", "type", "target_host", "response_status", "best_instance", "notification_data"}
+			headers := []string{"timestamp", "type", "target_host", "best_instance", "notification_data"}
 			err = globalCSVLogger.writer.Write(headers)
 			if err != nil {
 				return
@@ -56,15 +56,15 @@ func InitCSVLogger(filePath string) error {
 }
 
 // LogNotification logs a notification attempt to CSV
-func LogNotification(capability string, targetHost string, responseStatus string, notificationData string) error {
+func LogNotification(capability string, targetHost string, notificationData string) error {
 	if globalCSVLogger == nil {
 		return fmt.Errorf("CSV logger not initialized")
 	}
 
-	return globalCSVLogger.logNotification(capability, targetHost, responseStatus, notificationData)
+	return globalCSVLogger.logNotification(capability, targetHost, notificationData)
 }
 
-func (c *csvLogger) logNotification(capability string, targetHost string, responseStatus string, notificationData string) error {
+func (c *csvLogger) logNotification(capability string, targetHost string, notificationData string) error {
 	if c == nil {
 		return fmt.Errorf("CSV logger not initialized")
 	}
@@ -79,7 +79,6 @@ func (c *csvLogger) logNotification(capability string, targetHost string, respon
 		fmt.Sprintf("%d", timestamp),
 		capability,
 		targetHost,
-		responseStatus,
 		notificationData,
 	}
 

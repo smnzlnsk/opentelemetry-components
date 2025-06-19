@@ -34,33 +34,28 @@ func (n *notificationInterface[T]) Notify(notification T) error {
 		return err
 	}
 
+	if logger.IsCSVLoggerInitialized() {
+		notificationData, _ := json.Marshal(notification)
+		logError := logger.LogNotification(n.capability.String(), n.host, string(notificationData))
+		if logError != nil {
+			fmt.Println("error logging notification", logError)
+		}
+	}
+
 	resp, err := http.Post(
 		fmt.Sprintf("http://%s:%d%s", n.host, n.port, n.endpoint),
 		"application/json",
 		bytes.NewBuffer(data),
 	)
 
-	var responseStatus string
 	if err != nil {
-		responseStatus = fmt.Sprintf("error: %s", err.Error())
-	} else {
-		defer resp.Body.Close()
-		responseStatus = resp.Status
+		return err
 	}
 
-	if logger.IsCSVLoggerInitialized() {
-		notificationData, _ := json.Marshal(notification)
-		logError := logger.LogNotification(n.capability.String(), n.host, responseStatus, string(notificationData))
-		if logError != nil {
-			fmt.Println("error logging notification", logError)
-		}
-	}
-
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to send %s: %s", n.capability, resp.Status)
 	}
-
-	fmt.Println("notification sent", n.capability, notification)
 
 	return nil
 }
