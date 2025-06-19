@@ -39,6 +39,26 @@ type MetricsMap struct {
 	ServiceInstanceMetrics map[string]map[string]float64
 }
 
+func (m *HostMetricsMap) String() string {
+	for _, metrics := range *m {
+		fmt.Println(metrics.String())
+	}
+	return ""
+}
+
+func (m *MetricsMap) String() string {
+	for metricKey, metricValue := range m.HostMetrics {
+		fmt.Printf("\t%s: %f\n", metricKey, metricValue)
+	}
+	for serviceInstance, metrics := range m.ServiceInstanceMetrics {
+		fmt.Printf("\t%s:\n", serviceInstance)
+		for metricKey, metricValue := range metrics {
+			fmt.Printf("\t\t%s: %f\n", metricKey, metricValue)
+		}
+	}
+	return ""
+}
+
 func (m *HostMetricsMap) InstanceMetricsForEvaluation(serviceIdentifier string) map[string]interface{} {
 	values := make(map[string]interface{})
 
